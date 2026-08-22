@@ -107,6 +107,9 @@ importers:
       redux:
         specifier: ^5.0.1
         version: 5.0.1
+      suncalc:
+        specifier: ^1.9.0
+        version: 1.9.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -123,6 +126,9 @@ importers:
       '@types/qrcode':
         specifier: ^1.5.6
         version: 1.5.6
+      '@types/suncalc':
+        specifier: 1.9.2
+        version: 1.9.2
       '@types/three':
         specifier: ^0.184.1
         version: 0.184.1
@@ -1819,6 +1825,9 @@ packages:
 
   '@types/stats.js@0.17.4':
     resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
+
+  '@types/suncalc@1.9.2':
+    resolution: {integrity: sha512-ATAGBHHfA1TlE2tjfidLyTcysjoT2JHHEAmWRULh73SU9UTn++j5fqHEW16X6Y/2Li87jEQXzgu4R/OOdlDqzw==}
 
   '@types/three@0.184.1':
     resolution: {integrity: sha512-6q4VdiqVsrTRqmk62/BnlcAvIrnDM0zf2ZDVKI5kZiniWrSaOHaQzmbp+BNzoggc/8tgW412pL//wZIxu2PPTA==}
@@ -3620,6 +3629,9 @@ packages:
     engines: {node: '>=20.19.0'}
     hasBin: true
 
+  suncalc@1.9.0:
+    resolution: {integrity: sha512-vMJ8Byp1uIPoj+wb9c1AdK4jpkSKVAywgHX0lqY7zt6+EWRRC3Z+0Ucfjy/0yxTVO1hwwchZe4uoFNqrIC24+A==}
+
   supports-color@10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
     engines: {node: '>=18'}
@@ -4913,6 +4925,8 @@ snapshots:
   '@types/sarif@2.1.7': {}
 
   '@types/stats.js@0.17.4': {}
+
+  '@types/suncalc@1.9.2': {}
 
   '@types/three@0.184.1':
     dependencies:
@@ -6861,6 +6875,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
+
+  suncalc@1.9.0: {}
 
   supports-color@10.2.2: {}
 

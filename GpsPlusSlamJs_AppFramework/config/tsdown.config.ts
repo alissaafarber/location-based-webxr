@@ -99,6 +99,7 @@ const entryFiles = [
 
   'src/geo/index.ts',
   'src/geo/h3-proximity.ts',
+  'src/geo/sun-position.ts',
 
   // sensors/
   'src/sensors/index.ts',
@@ -234,6 +235,13 @@ export default defineConfig({
   clean: true,
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   deps: {
-    neverBundle: ['three', 'leaflet', 'h3-js', '@zip.js/zip.js', 'vitest'],
+    neverBundle: [
+      'three',
+      'leaflet',
+      'h3-js',
+      'suncalc',
+      '@zip.js/zip.js',
+      'vitest',
+    ],
   },
 });

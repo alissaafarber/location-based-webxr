@@ -2,7 +2,7 @@
 
 ## Goal
 
-Calculate the real sun direction from latitude, longitude, and a JavaScript
+Calculate the real sun direction from latitude, longitude, and a TypeScript
 `Date`, expressed as a normalized vector in the framework's NUE coordinate
 system. Iteration 1 covers calculation and tests only; it does not change the
 Three.js scene or lighting.
@@ -60,6 +60,11 @@ package owns the feature:
 - Keep it in a specific app only if the feature belongs exclusively to that
   app.
 
+Implement the feature in TypeScript (`.ts`), following the owning package's
+existing `tsconfig` and strictness rules. Do not add a separate JavaScript
+implementation or maintain duplicate `.js` source files; the package build
+will generate JavaScript and declaration files from the TypeScript source.
+
 Do not copy the OSM demo's current sun vector directly. Its simulated day is not
 GPS/date based, and its render axes (`+X` East, `+Y` Up, `-Z` North) differ from
 NUE.
@@ -69,7 +74,7 @@ NUE.
 Iteration 1 will:
 
 1. Add SunCalc to the package that owns the feature.
-2. Add a small, pure calculation module.
+2. Add a small, pure TypeScript calculation module and export its public types.
 3. Accept a `Date`, latitude in degrees, and longitude in degrees.
 4. Call `SunCalc.getPosition()` and convert its angles to NUE.
 5. Return the azimuth, altitude, normalized NUE direction, and
@@ -89,6 +94,64 @@ A conceptual result is:
 
 Returning both angles and the vector makes coordinate errors easier to debug.
 
+## TypeScript and typings specification
+
+Keep the types structural and small. Coordinates and angles remain `number`
+values; their units are made explicit in property and parameter names rather
+than through casts or branded-number types.
+
+The calculation module should expose these read-only public shapes:
+
+```ts
+export interface NueDirection {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface SunPositionResult {
+  readonly azimuthRad: number;
+  readonly altitudeRad: number;
+  readonly directionNue: NueDirection;
+  readonly isAboveHorizon: boolean;
+}
+```
+
+The pure conversion and public calculation signatures should be:
+
+```ts
+export function sunCalcAnglesToNue(
+  azimuthRad: number,
+  altitudeRad: number,
+): NueDirection;
+
+export function calculateSunPosition(
+  date: Date,
+  latitudeDeg: number,
+  longitudeDeg: number,
+): SunPositionResult;
+```
+
+Use `import SunCalc from "suncalc"` only if that form passes the owning
+package's TypeScript configuration. Otherwise use the import form supported by
+SunCalc's declarations and the existing module settings; do not silence an
+import problem with `any`, `@ts-ignore`, or an unsafe cast.
+
+At dependency-selection time, inspect the installed SunCalc version for bundled
+TypeScript declarations. If it does not provide them, add the matching
+`@types/suncalc` package as a `devDependency` of the owning workspace package.
+Do not write a local ambient `declare module "suncalc"` file unless neither the
+library nor DefinitelyTyped supplies compatible declarations; if a local
+declaration becomes necessary, keep it minimal and type only the used API:
+`getPosition(date: Date, latitude: number, longitude: number)` returning finite
+numeric `azimuth` and `altitude` properties.
+
+The module and its types must be exported through the owning package's existing
+public TypeScript entry point. Its build must emit corresponding `.d.ts` files,
+so consumers receive the same API types as the source. Tests should also be
+written in TypeScript (`.test.ts`) and must pass both the production and test
+typecheck commands.
+
 ## Input and edge-case policy
 
 - Reject an invalid `Date`.
@@ -105,10 +168,14 @@ Returning both angles and the vector makes coordinate errors easier to debug.
 - Handle azimuth wrapping (`-pi`/`+pi`) through the trigonometric conversion.
 - Near the zenith, accept that azimuth has little practical meaning while the
   direction remains valid.
+- Treat TypeScript types as compile-time guidance, not runtime validation.
+  Retain all validation above because JavaScript callers and untrusted runtime
+  values can still reach the compiled API.
 
 ## Tests
 
 Test the angle-to-NUE conversion independently from the SunCalc adapter.
+Write tests as `.test.ts` files without using `any` to bypass the public API.
 
 ### Conversion tests
 
@@ -151,6 +218,10 @@ Iteration 1 is complete when:
 - The returned direction has length approximately `1`.
 - Day/night status and invalid-input behavior are documented and tested.
 - The critical SunCalc azimuth convention is documented beside the conversion.
+- The source and tests pass the owning package's TypeScript checks without
+  `any`, `@ts-ignore`, or handwritten casts that hide SunCalc type errors.
+- The package build emits usable declarations for `NueDirection`,
+  `SunPositionResult`, `sunCalcAnglesToNue`, and `calculateSunPosition`.
 - No Three.js scene, light, renderer, GPS subscription, or shadow behavior has
   changed.
 

@@ -13,3 +13,10 @@ export {
   h3CellsMatch,
   isH3Index,
 } from './h3-proximity.js';
+
+export {
+  calculateSunPosition,
+  sunCalcAnglesToNue,
+  type NueDirection,
+  type SunPositionResult,
+} from './sun-position.js';

@@ -685,6 +685,19 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
 
+  GpsPlusSlamJs_SunPositionDemo:
+    dependencies:
+      gps-plus-slam-app-framework:
+        specifier: workspace:*
+        version: link:../GpsPlusSlamJs_AppFramework
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.12
+        version: 8.0.12(@types/node@25.7.0)(jiti@2.7.0)(yaml@2.9.0)
+
   GpsPlusSlamJs_WayfindingHudDemo:
     dependencies:
       gps-plus-slam-app-framework:

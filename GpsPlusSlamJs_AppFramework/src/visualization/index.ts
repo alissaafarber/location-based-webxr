@@ -144,6 +144,22 @@ export {
   createTextSprite,
 } from './text-sprite.js';
 
+// --- sun-disc-placement (pure placement seam for the visible sun disc) ---
+export {
+  type NuePosition,
+  computeSunDiscWorldPosition,
+  isSunDirectionAboveHorizon,
+} from './sun-disc-placement.js';
+
+// --- visible-sun-disc (camera-relative sun icon in GPS-world NUE) ---
+export {
+  type SunDiscVisibility,
+  type VisibleSunDisc,
+  type VisibleSunDiscOptions,
+  DEFAULT_VISIBLE_SUN_DISC,
+  createVisibleSunDisc,
+} from './visible-sun-disc.js';
+
 // --- wayfinding-hud (frustum-locked target indicators as camera children) ---
 export {
   type WayfindingHud,

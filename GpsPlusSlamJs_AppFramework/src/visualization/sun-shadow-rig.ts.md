@@ -11,12 +11,12 @@ Encapsulates the view-layer GPU configuration (Three.js directional light, shado
 The module strictly decouples mathematical projection from WebGL/GPU state:
 
 1. **Pure Framing & Placement Math (Headless / Engine-Free)**:
-   - `computeShadowFrustum(contentBounds, sunDirection, options)`: projects visible content bounding volumes into light view space and calculates tight orthographic frustum planes (`left`, `right`, `top`, `bottom`, `near`, `far`).
-   - `computeLightPlacement(targetOrigin, sunDirection, distance)`: calculates the 3D position of the directional light along the solar vector pointing toward the target origin.
+   - `computeShadowFrustum(contentBounds, directionNue, options)`: projects visible content bounding volumes into light view space and calculates tight orthographic frustum planes (`left`, `right`, `top`, `bottom`, `near`, `far`).
+   - `computeLightPlacement(targetOrigin, directionNue, distance)`: calculates the 3D position of the directional light along the solar vector pointing toward the target origin.
    - Operates entirely on plain TypeScript numbers and geometry interfaces (`NueDirection`, `Aabb3D`, `Sphere3D`). Has zero dependencies on WebGL contexts, DOM, or GPU drivers, making it 100% deterministic and unit-testable.
 
 2. **View-Layer GPU Configuration (Three.js Scene Adapter)**:
-   - `createSunShadowRig(scene, options)` / `SunShadowRig`: manages Three.js scene-graph nodes (`THREE.DirectionalLight`, `light.target`, and `THREE.Mesh` with `THREE.ShadowMaterial`).
+   - `createSunShadowRig(parent, options)` / `SunShadowRig`: manages Three.js scene-graph nodes (`THREE.DirectionalLight`, `light.target`, and `THREE.Mesh` with `THREE.ShadowMaterial`).
    - Configures WebGL shadow map parameters: resolution, depth bias, and normal bias.
    - Synchronizes light transforms, frustum planes, and shadow-catcher position on per-frame updates.
    - Cleans up GPU buffers, materials, and geometries on `dispose()`.
@@ -93,6 +93,16 @@ export interface SunLightPlacement {
 
 /** Configuration options for the Sun-driven shadow rig. */
 export interface SunShadowRigOptions {
+  /**
+   * Target focal point in metres towards which the light points.
+   * Default: { x: 0, y: 0, z: 0 }.
+   */
+  readonly targetOrigin?: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+
   /**
    * Distance in metres from target along the sun direction vector.
    * Default: 50 m.
@@ -193,6 +203,7 @@ export const DEFAULT_SUN_SHADOW_RIG: Readonly<{
   shadowColor: number;
   margin: number;
   defaultContentExtent: number;
+  targetOrigin: { readonly x: number; readonly y: number; readonly z: number };
 }>;
 
 /**
@@ -208,18 +219,43 @@ export function computeLightPlacement(
   distance: number
 ): SunLightPlacement;
 
+/** Configuration options for orthographic shadow frustum calculation. */
+export interface ShadowFrustumOptions {
+  /**
+   * Distance in metres from target along the sun direction vector.
+   * Default: 50 m.
+   */
+  readonly distance?: number;
+
+  /**
+   * Target focal point in metres.
+   * Default: { x: 0, y: 0, z: 0 }.
+   */
+  readonly targetOrigin?: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+
+  /**
+   * Safety margin factor (>= 1.0) applied to the framed bounding volume.
+   * Default: 1.15.
+   */
+  readonly margin?: number;
+}
+
 /**
  * Pure calculation: compute tight orthographic frustum extents for a directional light
  * enclosing the specified content volume.
  *
  * @param contentBounds - Bounding box or bounding sphere of visible content.
  * @param directionNue - Normalized sun direction.
- * @param margin - Padding factor (>= 1.0).
+ * @param options - Frustum options (distance, targetOrigin, margin) or scalar margin factor.
  */
 export function computeShadowFrustum(
   contentBounds: ContentBounds,
   directionNue: NueDirection,
-  margin?: number
+  options?: number | ShadowFrustumOptions
 ): ShadowFrustum;
 
 /**
@@ -236,36 +272,57 @@ export function createSunShadowRig(
 
 ## Shadow Camera Framing & Mathematical Derivation
 
-Directional lights project parallel rays along $-\vec{d}_{\text{sun}}$. Their shadow camera is a `THREE.OrthographicCamera` whose view coordinate system $(u, v, w)$ is aligned such that:
+Directional lights project parallel rays along $-\hat{d}_{\text{sun}}$. Their shadow camera is a `THREE.OrthographicCamera` whose view coordinate system $(u, v, w)$ is aligned such that:
 
-- $+w$ points towards the light source ($+\vec{d}_{\text{sun}}$).
-- $-w$ points along the light ray direction ($-\vec{d}_{\text{sun}}$).
+- $+w$ points towards the light source ($+\hat{d}_{\text{sun}}$).
+- $-w$ points along the forward optical ray direction ($-\hat{d}_{\text{sun}}$).
 - $(u, v)$ spans the perpendicular projection plane onto which shadows are cast.
 
 ### 1. Light Placement
 
 Given a target focal point $\vec{p}_{\text{target}}$ (by default the scene origin $[0, 0, 0]$):
 $$\vec{p}_{\text{light}} = \vec{p}_{\text{target}} + d \cdot \hat{d}_{\text{sun}}$$
-Where $d$ is `options.distance`. Setting `light.target.position = target` ensures the light looks directly down $-\hat{d}_{\text{sun}}$.
+where $d$ is `options.distance`. Setting `light.target.position = target` ensures the light looks directly down $-\hat{d}_{\text{sun}}$.
 
-### 2. Orthographic Frustum Bounds (`computeShadowFrustum`)
+### 2. View Space Orthonormal Basis
+
+To construct the light's view coordinate system:
+
+1. The forward optical ray direction is $\hat{f} = -\hat{d}_{\text{sun}}$.
+2. An up reference vector $\vec{\text{up}}_{\text{ref}} = [0, 1, 0]$ (+Y in NUE) is chosen. If the sun is near zenith or nadir ($|\hat{d}_{\text{sun}} \cdot \vec{\text{up}}_{\text{ref}}| > 0.999$), an alternate reference $\vec{\text{up}}_{\text{ref}} = [0, 0, 1]$ (+Z East) is used to avoid gimbal lock.
+3. The orthonormal basis vectors are:
+   $$\hat{u} = \frac{\hat{f} \times \vec{\text{up}}_{\text{ref}}}{\|\hat{f} \times \vec{\text{up}}_{\text{ref}}\|}, \quad \hat{v} = \hat{u} \times \hat{f}, \quad \hat{w} = -\hat{f} = \hat{d}_{\text{sun}}$$
+
+### 3. Orthographic Frustum Bounds (`computeShadowFrustum`)
 
 To maximize shadow map texel resolution and prevent aliasing, the orthographic camera frustum must tightly bound the visible content rather than using an arbitrary fixed box:
 
 - **For a Bounding Sphere $(\vec{c}, r)$**:
-  Project the sphere center $\vec{c}$ into light view space. Because a sphere of radius $r$ is rotationally invariant, its projection onto any orthogonal plane has half-extents $r$.
+  Project the sphere center $\vec{c}$ relative to the target origin into the view plane:
+  $$c_u = (\vec{c} - \vec{p}_{\text{target}}) \cdot \hat{u}$$
+  $$c_v = (\vec{c} - \vec{p}_{\text{target}}) \cdot \hat{v}$$
+  Because a sphere of radius $r$ is rotationally invariant, its projection onto any orthogonal plane has half-extents $r$.
   With safety margin $m$:
   $$\text{extent} = r \cdot m$$
-  $$\text{left} = - \text{extent}, \quad \text{right} = \text{extent}$$
-  $$\text{bottom} = - \text{extent}, \quad \text{top} = \text{extent}$$
-  Depth extents are bounded along the light axis:
-  $$\text{near} = \max(0.1, \text{dist}(\vec{p}_{\text{light}}, \vec{c}) - r \cdot m)$$
-  $$\text{far} = \text{dist}(\vec{p}_{\text{light}}, \vec{c}) + r \cdot m$$
+  $$\text{left} = c_u - \text{extent}, \quad \text{right} = c_u + \text{extent}$$
+  $$\text{bottom} = c_v - \text{extent}, \quad \text{top} = c_v + \text{extent}$$
+  Depth extents are planar distances measured along the light's forward optical axis ($\hat{f} = -\hat{d}_{\text{sun}}$) from the light position $\vec{p}_{\text{light}}$:
+  $$d_{\text{axial}} = (\vec{c} - \vec{p}_{\text{light}}) \cdot (-\hat{d}_{\text{sun}})$$
+  $$\text{near} = \max(0.1, d_{\text{axial}} - r \cdot m)$$
+  $$\text{far} = d_{\text{axial}} + r \cdot m$$
 
 - **For an Axis-Aligned Bounding Box (AABB)**:
-  Transform all 8 corner vertices of the AABB into the light's orthonormal coordinate space. Compute the minimal $[\min_u, \max_u]$, $[\min_v, \max_v]$, and $[\min_w, \max_w]$ across all corners, scaling $(u, v)$ bounds by margin $m$.
+  Project all 8 corner vertices $\vec{v}_k$ of the AABB into the light's view coordinate space:
+  $$u_k = (\vec{v}_k - \vec{p}_{\text{target}}) \cdot \hat{u}, \quad v_k = (\vec{v}_k - \vec{p}_{\text{target}}) \cdot \hat{v}, \quad z_k = (\vec{v}_k - \vec{p}_{\text{light}}) \cdot (-\hat{d}_{\text{sun}})$$
+  Compute the midpoint and scaled half-extents across all 8 corners:
+  $$u_{\text{mid}} = \frac{\min(u) + \max(u)}{2}, \quad w_u = \frac{\max(u) - \min(u)}{2} \cdot m$$
+  $$v_{\text{mid}} = \frac{\min(v) + \max(v)}{2}, \quad h_v = \frac{\max(v) - \min(v)}{2} \cdot m$$
+  $$\text{left} = u_{\text{mid}} - w_u, \quad \text{right} = u_{\text{mid}} + w_u$$
+  $$\text{bottom} = v_{\text{mid}} - h_v, \quad \text{top} = v_{\text{mid}} + h_v$$
+  $$\text{near} = \max(0.1, \min(z) - 0.5 \cdot m)$$
+  $$\text{far} = \max(z) + 0.5 \cdot m$$
 
-Tightly fitting `near` and `far` is critical: minimizing $(\text{far} - \text{near})$ optimizes depth buffer precision and significantly reduces shadow acne.
+Tightly fitting `near` and `far` along the optical axis is critical: minimizing $(\text{far} - \text{near})$ optimizes depth buffer precision and significantly reduces shadow acne.
 
 ## Shadow Tuning & Artifact Prevention
 
@@ -302,16 +359,18 @@ newScene.add(directionalLight);
 
 `SunShadowRig` replaces this fixed light:
 
-1. **Directional Realism**: Instead of a hardcoded vector $(0, 10, 5)$, the light is positioned dynamically from astronomical calculations (`sun-position.ts`).
+1. **Directional Realism**: Instead of a hardcoded vector $(0, 10, 5)$, the light is positioned dynamically from astronomical calculations ([`sun-position.ts`](../geo/sun-position.ts)).
 2. **Shadow Infrastructure**: Activates `directionalLight.castShadow = true`, configures `light.shadow.camera`, tunes biases, and attaches the shadow-catcher.
-3. **Photometric Synchronization**: Pairs seamlessly with `sunAltitudeToLighting` from `../geo/sun-altitude-lighting.js` to modulate light color, intensity, and shadow prominence based on solar altitude (dawn, midday, golden hour, twilight).
+3. **Photometric Synchronization**: Pairs seamlessly with `sunAltitudeToLighting` from [`../geo/sun-altitude-lighting.ts`](../geo/sun-altitude-lighting.ts) to modulate light color, intensity, and shadow prominence based on solar altitude (dawn, midday, golden hour, twilight).
 
 ## Invariants & Assumptions
 
 - **Coordinate System**: All directions and positions follow the framework's **NUE** convention ($+X = \text{North}$, $+Y = \text{Up}$, $+Z = \text{East}$).
 - **Parent Node**: The rig must be attached to the **scene root** (GPS-world NUE space), _never_ to `arWorldGroup`. This ensures solar orientation is fixed to geographic directions rather than rotating with AR odometry drift.
 - **Normalized Direction**: `directionNue` is expected to be normalized ($\|\vec{d}\| \approx 1$). Non-finite or zero-length inputs throw `TypeError`/`RangeError` in validation.
+- **Zenith & Nadir Handling**: When the sun direction is collinear or nearly collinear with the world Up vector ($|\hat{d}_{\text{sun}} \cdot \vec{\text{up}}| > 0.999$), the camera's orthonormal basis calculation switches reference vectors to $+Z$ East ($[0, 0, 1]$), eliminating gimbal lock and matrix degeneracy in `lookAt`.
 - **Horizon Policy**: When `directionNue.y <= 0` (sun below horizon), `directionalLight.castShadow` is set to `false` and the shadow catcher is hidden, preventing inverted shadows shining upwards from beneath the ground plane.
+- **Ground Alignment**: The shadow catcher plane is aligned horizontally at $Y = 0$ ($R_x = -\pi/2$). Its position in XZ stays centered at `targetOrigin` to cover the active scene area.
 - **Pure Functions**: `computeShadowFrustum` and `computeLightPlacement` do not allocate Three.js objects or modify global state.
 - **Resource Management**: `dispose()` disposes geometries, materials, shadow map render targets, and detaches nodes from the scene.
 
@@ -321,10 +380,13 @@ newScene.add(directionalLight);
 
 ```ts
 import * as THREE from 'three';
+import { createSceneHierarchy } from 'gps-plus-slam-app-framework/ar';
 import { createSunShadowRig } from 'gps-plus-slam-app-framework/visualization';
 import { calculateSunPosition } from 'gps-plus-slam-app-framework/geo';
 
 const { scene } = createSceneHierarchy();
+const userLat = 51.5074;
+const userLng = -0.1278;
 
 // Initialize the Sun-driven shadow rig:
 const shadowRig = createSunShadowRig(scene, {
@@ -358,6 +420,9 @@ const contentBounds = {
   min: { x: -5, y: 0, z: -5 },
   max: { x: 5, y: 3, z: 5 },
 };
+
+// Pure math utility calculates tight frustum planes directly:
+const frustum = computeShadowFrustum(contentBounds, sunDirectionNue);
 
 // Rig updates both direction and tightly frames the shadow camera:
 shadowRig.update(sunDirectionNue, contentBounds);
@@ -398,6 +463,6 @@ function updateSun(date: Date, lat: number, lng: number): void {
 
 ## Consumers
 
-- `GpsPlusSlamJs_AppFramework/src/ar/ar-scene-hierarchy.ts`: provides the replacement path for the fixed directional light.
+- [`ar-scene-hierarchy.ts`](../ar/ar-scene-hierarchy.ts): provides the replacement path for the fixed directional light.
 - `GpsPlusSlamJs_SunPositionDemo`: demonstrates realistic shadows tracking the sun across the sky throughout the day.
 - `GpsPlusSlamJs_AnchorStarter` & `GpsPlusSlamJs_MinimalExample`: provides realistic ground contact shadows for placed AR anchors and objects.

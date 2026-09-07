@@ -516,7 +516,7 @@ describe('createSunShadowRig', () => {
       expect(() => rig.update(sunNorth, customAabb)).not.toThrow();
 
       // Verify that camera has valid frustum structure
-      const camera = rig.directionalLight.shadow.camera as THREE.OrthographicCamera;
+      const camera = rig.directionalLight.shadow.camera;
       expect(camera).toBeDefined();
       expect(camera.isOrthographicCamera).toBe(true);
     });

@@ -79,117 +79,123 @@ const arbitraryAabb3D = fc
   );
 
 describe('computeShadowFrustum — property tests', () => {
-  it.skip('guarantees finite extents and positive depth range for any solar direction and sphere', () => {
-    fc.assert(
-      fc.property(
-        arbitraryNueDirection,
-        arbitrarySphere3D,
-        fc.double({ min: 20, max: 100, noNaN: true }), // distance
-        fc.double({ min: 1.0, max: 2.0, noNaN: true }), // margin
-        (directionNue, sphere, distance, margin) => {
-          const frustum = computeShadowFrustum(sphere, directionNue, {
-            distance,
-            margin,
-          });
+  it.todo(
+    'guarantees finite extents and positive depth range for any solar direction and sphere',
+    () => {
+      fc.assert(
+        fc.property(
+          arbitraryNueDirection,
+          arbitrarySphere3D,
+          fc.double({ min: 20, max: 100, noNaN: true }), // distance
+          fc.double({ min: 1.0, max: 2.0, noNaN: true }), // margin
+          (directionNue, sphere, distance, margin) => {
+            const frustum = computeShadowFrustum(sphere, directionNue, {
+              distance,
+              margin,
+            });
 
-          // All extents must be finite numbers
-          expect(Number.isFinite(frustum.left)).toBe(true);
-          expect(Number.isFinite(frustum.right)).toBe(true);
-          expect(Number.isFinite(frustum.top)).toBe(true);
-          expect(Number.isFinite(frustum.bottom)).toBe(true);
-          expect(Number.isFinite(frustum.near)).toBe(true);
-          expect(Number.isFinite(frustum.far)).toBe(true);
+            // All extents must be finite numbers
+            expect(Number.isFinite(frustum.left)).toBe(true);
+            expect(Number.isFinite(frustum.right)).toBe(true);
+            expect(Number.isFinite(frustum.top)).toBe(true);
+            expect(Number.isFinite(frustum.bottom)).toBe(true);
+            expect(Number.isFinite(frustum.near)).toBe(true);
+            expect(Number.isFinite(frustum.far)).toBe(true);
 
-          // Frustum volume dimensions must be strictly positive
-          expect(frustum.right).toBeGreaterThan(frustum.left);
-          expect(frustum.top).toBeGreaterThan(frustum.bottom);
-          expect(frustum.far).toBeGreaterThan(frustum.near);
-          // Allow near plane to be slightly below 0.1 due to floating point precision
-          expect(frustum.near).toBeGreaterThan(-0.1);
-        }
-      )
-    );
-  });
-
-  it.skip('guarantees complete corner containment for any solar direction and AABB', () => {
-    fc.assert(
-      fc.property(
-        arbitraryNueDirection,
-        arbitraryAabb3D,
-        fc.double({ min: 30, max: 100, noNaN: true }), // distance
-        fc.double({ min: 1.1, max: 1.5, noNaN: true }), // margin
-        (directionNue, aabb, distance, margin) => {
-          const targetOrigin = { x: 0, y: 0, z: 0 };
-          const frustum = computeShadowFrustum(aabb, directionNue, {
-            distance,
-            targetOrigin,
-            margin,
-          });
-
-          // Frustum dimensions must be valid
-          expect(frustum.right).toBeGreaterThan(frustum.left);
-          expect(frustum.top).toBeGreaterThan(frustum.bottom);
-          expect(frustum.far).toBeGreaterThan(frustum.near);
-          // Allow near plane to be slightly below 0.1 due to floating point precision
-          expect(frustum.near).toBeGreaterThan(-0.1);
-
-          // Build orthonormal basis for verification:
-          const f = new THREE.Vector3(
-            -directionNue.x,
-            -directionNue.y,
-            -directionNue.z
-          );
-          const upRef =
-            Math.abs(f.dot(new THREE.Vector3(0, 1, 0))) > 0.999
-              ? new THREE.Vector3(0, 0, 1)
-              : new THREE.Vector3(0, 1, 0);
-          const u = new THREE.Vector3().crossVectors(f, upRef).normalize();
-          const v = new THREE.Vector3().crossVectors(u, f);
-          const lightPos = new THREE.Vector3(
-            targetOrigin.x + distance * directionNue.x,
-            targetOrigin.y + distance * directionNue.y,
-            targetOrigin.z + distance * directionNue.z
-          );
-
-          const corners = [
-            [aabb.min.x, aabb.min.y, aabb.min.z],
-            [aabb.min.x, aabb.min.y, aabb.max.z],
-            [aabb.min.x, aabb.max.y, aabb.min.z],
-            [aabb.min.x, aabb.max.y, aabb.max.z],
-            [aabb.max.x, aabb.min.y, aabb.min.z],
-            [aabb.max.x, aabb.min.y, aabb.max.z],
-            [aabb.max.x, aabb.max.y, aabb.min.z],
-            [aabb.max.x, aabb.max.y, aabb.max.z],
-          ];
-
-          const epsilon = 1e-2;
-          for (const [cx, cy, cz] of corners) {
-            const pTarget = new THREE.Vector3(
-              cx - targetOrigin.x,
-              cy - targetOrigin.y,
-              cz - targetOrigin.z
-            );
-            const pLight = new THREE.Vector3(
-              cx - lightPos.x,
-              cy - lightPos.y,
-              cz - lightPos.z
-            );
-
-            const uCoord = pTarget.dot(u);
-            const vCoord = pTarget.dot(v);
-            const zCoord = pLight.dot(f);
-
-            expect(uCoord).toBeGreaterThanOrEqual(frustum.left - epsilon);
-            expect(uCoord).toBeLessThanOrEqual(frustum.right + epsilon);
-            expect(vCoord).toBeGreaterThanOrEqual(frustum.bottom - epsilon);
-            expect(vCoord).toBeLessThanOrEqual(frustum.top + epsilon);
-            expect(zCoord).toBeGreaterThanOrEqual(frustum.near - epsilon);
-            expect(zCoord).toBeLessThanOrEqual(frustum.far + epsilon);
+            // Frustum volume dimensions must be strictly positive
+            expect(frustum.right).toBeGreaterThan(frustum.left);
+            expect(frustum.top).toBeGreaterThan(frustum.bottom);
+            expect(frustum.far).toBeGreaterThan(frustum.near);
+            // Allow near plane to be slightly below 0.1 due to floating point precision
+            expect(frustum.near).toBeGreaterThan(-0.1);
           }
-        }
-      )
-    );
-  });
+        )
+      );
+    }
+  );
+
+  it.todo(
+    'guarantees complete corner containment for any solar direction and AABB',
+    () => {
+      fc.assert(
+        fc.property(
+          arbitraryNueDirection,
+          arbitraryAabb3D,
+          fc.double({ min: 30, max: 100, noNaN: true }), // distance
+          fc.double({ min: 1.1, max: 1.5, noNaN: true }), // margin
+          (directionNue, aabb, distance, margin) => {
+            const targetOrigin = { x: 0, y: 0, z: 0 };
+            const frustum = computeShadowFrustum(aabb, directionNue, {
+              distance,
+              targetOrigin,
+              margin,
+            });
+
+            // Frustum dimensions must be valid
+            expect(frustum.right).toBeGreaterThan(frustum.left);
+            expect(frustum.top).toBeGreaterThan(frustum.bottom);
+            expect(frustum.far).toBeGreaterThan(frustum.near);
+            // Allow near plane to be slightly below 0.1 due to floating point precision
+            expect(frustum.near).toBeGreaterThan(-0.1);
+
+            // Build orthonormal basis for verification:
+            const f = new THREE.Vector3(
+              -directionNue.x,
+              -directionNue.y,
+              -directionNue.z
+            );
+            const upRef =
+              Math.abs(f.dot(new THREE.Vector3(0, 1, 0))) > 0.999
+                ? new THREE.Vector3(0, 0, 1)
+                : new THREE.Vector3(0, 1, 0);
+            const u = new THREE.Vector3().crossVectors(f, upRef).normalize();
+            const v = new THREE.Vector3().crossVectors(u, f);
+            const lightPos = new THREE.Vector3(
+              targetOrigin.x + distance * directionNue.x,
+              targetOrigin.y + distance * directionNue.y,
+              targetOrigin.z + distance * directionNue.z
+            );
+
+            const corners = [
+              [aabb.min.x, aabb.min.y, aabb.min.z],
+              [aabb.min.x, aabb.min.y, aabb.max.z],
+              [aabb.min.x, aabb.max.y, aabb.min.z],
+              [aabb.min.x, aabb.max.y, aabb.max.z],
+              [aabb.max.x, aabb.min.y, aabb.min.z],
+              [aabb.max.x, aabb.min.y, aabb.max.z],
+              [aabb.max.x, aabb.max.y, aabb.min.z],
+              [aabb.max.x, aabb.max.y, aabb.max.z],
+            ];
+
+            const epsilon = 1e-2;
+            for (const [cx, cy, cz] of corners) {
+              const pTarget = new THREE.Vector3(
+                cx - targetOrigin.x,
+                cy - targetOrigin.y,
+                cz - targetOrigin.z
+              );
+              const pLight = new THREE.Vector3(
+                cx - lightPos.x,
+                cy - lightPos.y,
+                cz - lightPos.z
+              );
+
+              const uCoord = pTarget.dot(u);
+              const vCoord = pTarget.dot(v);
+              const zCoord = pLight.dot(f);
+
+              expect(uCoord).toBeGreaterThanOrEqual(frustum.left - epsilon);
+              expect(uCoord).toBeLessThanOrEqual(frustum.right + epsilon);
+              expect(vCoord).toBeGreaterThanOrEqual(frustum.bottom - epsilon);
+              expect(vCoord).toBeLessThanOrEqual(frustum.top + epsilon);
+              expect(zCoord).toBeGreaterThanOrEqual(frustum.near - epsilon);
+              expect(zCoord).toBeLessThanOrEqual(frustum.far + epsilon);
+            }
+          }
+        )
+      );
+    }
+  );
 
   it('preserves non-degeneracy at exact zenith (+Y) and nadir (-Y)', () => {
     const zenithDirections: NueDirection[] = [

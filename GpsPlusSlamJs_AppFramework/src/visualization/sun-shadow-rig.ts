@@ -532,7 +532,7 @@ export function createSunShadowRig(
         margin: resolvedOptions.margin,
       });
 
-      const camera = directionalLight.shadow.camera as THREE.OrthographicCamera;
+      const camera = directionalLight.shadow.camera;
       camera.left = frustum.left;
       camera.right = frustum.right;
       camera.top = frustum.top;

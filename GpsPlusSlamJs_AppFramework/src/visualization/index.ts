@@ -175,3 +175,18 @@ export {
 
 // --- vis-colors ---
 export { VIS_COLORS } from './vis-colors.js';
+
+// --- sun-shadow-rig ---
+export {
+  type Aabb3D,
+  type Sphere3D,
+  type ContentBounds,
+  type ShadowFrustum,
+  type SunLightPlacement,
+  type SunShadowRigOptions,
+  type SunShadowRig,
+  DEFAULT_SUN_SHADOW_RIG,
+  computeLightPlacement,
+  computeShadowFrustum,
+  createSunShadowRig,
+} from './sun-shadow-rig.js';

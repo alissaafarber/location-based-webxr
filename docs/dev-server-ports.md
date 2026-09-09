@@ -13,10 +13,11 @@
 - **5185** — `GpsPlusSlamJs_QrTrackingDemo`
 - **5186** — `GpsPlusSlamJs_OsmDemo`
 - **5187** — `GpsPlusSlamJs_SunPositionDemo`
-- **5188** — `GpsPlusSlamJs_SunShadowRigDemo`
-- **5189** — `GpsPlusSlamJs_SunAltitudeLightingDemo`
+- **5188** — `GpsPlusSlamJs_VisibleSunDiscDemo`
+- **5189** — `GpsPlusSlamJs_SunShadowRigDemo`
+- **5190** — `GpsPlusSlamJs_SunAltitudeLightingDemo`
 
-Next free: **5190**.
+Next free: **5191**.
 
 Each port appears in three places for its package — `vite.config.ts` (`server.port`) and
 `playwright-tests/playwright.config.js` (`baseURL` and the `webServer` `command`/`url`).

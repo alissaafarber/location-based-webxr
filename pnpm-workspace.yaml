@@ -12,6 +12,7 @@ packages:
   - GpsPlusSlamJs_SunPositionDemo
   - GpsPlusSlamJs_SunShadowRigDemo
   - GpsPlusSlamJs_SunAltitudeLightingDemo
+  - GpsPlusSlamJs_VisibleSunDiscDemo
 
 # pnpm 11: only these packages may run install/postinstall build scripts
 # (strictDepBuilds is on by default in v11, so anything else errors loudly

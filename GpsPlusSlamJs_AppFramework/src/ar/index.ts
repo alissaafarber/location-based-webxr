@@ -17,6 +17,8 @@ export {
   computeCaptureSize,
   computeAspectFitSize,
   CameraBlitCapture,
+  type RgbaFrame,
+  rgbaImageToJpegBlob,
 } from './camera-blit-capture.js';
 
 // --- capability-checker ---
@@ -87,6 +89,34 @@ export { bresenham3d, type GridCell } from './bresenham3d.js';
 
 // --- occupancy-grid ---
 export { OccupancyGrid, type OccupancyGridOptions } from './occupancy-grid.js';
+
+// --- floor-estimator (column-histogram + plane-fit floor under the camera) ---
+export {
+  type FloorEstimatorOptions,
+  type FloorHit,
+  type FloorEstimate,
+  DEFAULT_FLOOR_QUERY_RADIUS_M,
+  DEFAULT_FLOOR_MIN_BELOW_CAMERA_M,
+  DEFAULT_FLOOR_MIN_SUPPORT_CELLS,
+  DEFAULT_FLOOR_BAND_CELLS,
+  PLAUSIBLE_HEIGHT_MIN_M,
+  PLAUSIBLE_HEIGHT_MAX_M,
+  estimateFloor,
+} from './floor-estimator.js';
+
+// --- elevation-offset-estimator (slew-limited weighted median + freeze
+// layer over baseline-free floor-vs-terrain delta samples) ---
+export {
+  type ElevationOffsetSample,
+  type ElevationOffsetTick,
+  type ElevationOffsetFreezeOptions,
+  type ElevationOffsetOptions,
+  type ElevationOffsetState,
+  type ElevationOffsetEstimator,
+  DEFAULT_ELEVATION_OFFSET_OPTIONS,
+  MAX_SLEW_DT_S,
+  createElevationOffsetEstimator,
+} from './elevation-offset-estimator.js';
 
 // --- occupancy-mesher (sparse voxel Set → face-culled surface + AABB list) ---
 export {
@@ -179,6 +209,12 @@ export {
   endARSession,
   type ArSessionCallbacks,
   type SessionEndInfo,
+  // EXPORTED 2026-08-12 because it is part of `initAR`'s public contract and a
+  // consumer could not name it: `ArSessionCallbacks.tracking.store` requires
+  // this shape, so an app typing its own store dependency had to either
+  // re-declare the interface or widen to `SubscribableStore` and fail to
+  // compile on the missing `dispatch`.
+  type TrackingSubscribableStore,
   rebindTrackingStore,
   startImageCapture,
   stopImageCapture,
@@ -193,6 +229,7 @@ export {
   getScene,
   getArWorldGroup,
   getCamera,
+  getRenderer,
   getCurrentArPose,
   getDepthInfoFromFrame,
   type SessionFeatureOptions,
@@ -206,6 +243,28 @@ export {
   type ImmersiveArProbeOutcome,
   type XrSystemLike,
 } from './webxr-support-probe.js';
+
+// --- tour-manifest / tour-archive (`tour.json`: placed content with exact
+// geo poses, and where it lives in a tour archive) ---
+export {
+  TOUR_MANIFEST_VERSION,
+  type TourManifest,
+  type TourObject,
+  type TourPin,
+  type TourPhoto,
+  type TourObjectKind,
+  TourManifestValidationError,
+  createEmptyTourManifest,
+  parseTourManifest,
+  serializeTourManifest,
+} from './tour-manifest.js';
+export {
+  TOUR_MANIFEST_ENTRY,
+  TOUR_CONTENT_FOLDER,
+  tourContentEntryName,
+  tourManifestEntryOf,
+  readTourManifestFromEntries,
+} from './tour-archive.js';
 
 // --- webxr-nue-basis ---
 export { WEBXR_TO_NUE } from './webxr-nue-basis.js';

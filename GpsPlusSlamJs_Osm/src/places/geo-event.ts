@@ -273,6 +273,25 @@ export function climbToLocalMaximum({
 export const CANDIDATES_PER_BATCH = 10;
 const MAX_BATCHES = 10;
 
+/**
+ * Hotter first, then the smaller cell id — a TOTAL order with no user in it.
+ *
+ * Returns 0 for the same cell rather than 1 for both orderings: an
+ * inconsistent comparator hands the permutation to the engine, and the
+ * engine's tie falls back on input order, which is the caller's tile order —
+ * the user's tile first. The survivor's `cell`, `position` and `heat` would
+ * be identical either way; `candidate` and `evaluated` would not (milestone
+ * review, 2026-09-05).
+ */
+function byHeatThenCell(
+  a: { heat: number; cell: string },
+  b: { heat: number; cell: string },
+): number {
+  if (a.heat !== b.heat) return b.heat - a.heat;
+  if (a.cell === b.cell) return 0;
+  return a.cell < b.cell ? -1 : 1;
+}
+
 /** The chosen candidate, plus what it beat. */
 export interface BestPick {
   /**
@@ -450,7 +469,11 @@ export interface EventTile {
 export interface GeoEvent {
   /** When it starts, epoch ms. */
   readonly eventTime: number;
-  /** One pick per tile that had a valid position, NEAREST TO THE USER FIRST. */
+  /**
+   * One pick per tile that had a valid position, NEAREST TO THE USER FIRST —
+   * minus any pick the caller's `sameSpot` merged into another (two tiles
+   * that climbed onto one plateau from two sides report it once).
+   */
   readonly picks: readonly BestPick[];
   /**
    * How many tiles were SEARCHED, which is not how many yielded a pick (F57).
@@ -460,10 +483,14 @@ export interface GeoEvent {
    * different NUMBER of events. Each individual event is identical for both --
    * the divergence is coverage, never disagreement -- but without this the UI
    * cannot say which it is, and a missing event reads as "broken" rather than as
-   * "not loaded yet".
+   * "not loaded yet". (One bounded exception since the `sameSpot` merge: a
+   * device that searched only one of two tiles sharing a plateau can show the
+   * other cell of that plateau — within the caller's separation, the same
+   * place.)
    *
    * `picks.length` cannot stand in: a tile that is all water is searched and
-   * yields nothing, which is a different fact from not having looked.
+   * yields nothing, which is a different fact from not having looked — and
+   * two tiles may have reported one spot.
    */
   readonly tilesSearched: number;
 }
@@ -500,6 +527,8 @@ export function newGeoEventFor({
   neighbours,
   steps,
   threshold,
+  cellsOfTile,
+  sameSpot,
 }: {
   user: LatLng;
   tiles: readonly EventTile[];
@@ -512,21 +541,82 @@ export function newGeoEventFor({
   steps: number;
   /** The category threshold the MAP uses. See `bestPickForTile`. */
   threshold?: number;
+  /**
+   * Supply this to SCAN each tile instead of climbing within it.
+   *
+   * Present means exhaustive: every cell whose heat is known is ranked and the
+   * time seed picks among the best separated peaks ({@link bestPickOverField}).
+   * Absent means the original seeded-candidates hill climb.
+   *
+   * **Both paths are live on purpose.** The scan is measured at 364 ms over one
+   * tile, which is a LOWER bound — no fixture holds a full tile — so the climb
+   * stays reachable by not passing this, and its tests keep running, rather than
+   * becoming a fallback nobody exercises.
+   */
+  cellsOfTile?: (tile: EventTile) => Iterable<string>;
+  /**
+   * Supply this to report a spot ONCE when two tiles both settle on it.
+   *
+   * Candidates are seeded in each tile's bounding box, which overlaps the
+   * neighbours, and the climb stops on flat ground wherever it entered — so
+   * two tiles can climb onto one plateau from two sides and report adjacent
+   * cells with the same heat (the owner's second marker "a few metres from
+   * the first", 2026-09-04). Picks the predicate relates are merged: the
+   * higher heat survives, an exact tie the smaller cell id. Nothing about the
+   * user enters the rule, so the surviving cell is the same on every device
+   * that searched both tiles. Injected, like `neighbours`, because this half
+   * does not know about H3; the caller decides what "the same spot" means.
+   *
+   * Absent means no merging — every tile's pick is reported, as before.
+   */
+  sameSpot?: (a: string, b: string) => boolean;
 }): GeoEvent {
   const picks: BestPick[] = [];
   for (const tile of tiles) {
-    const pick = bestPickForTile({
-      bbox: tile.bbox,
-      globalSeed,
-      eventTime,
-      toCell,
-      toLatLng,
-      heatAt,
-      neighbours,
-      steps,
-      ...(threshold === undefined ? {} : { threshold }),
-    });
+    const pick =
+      cellsOfTile === undefined
+        ? bestPickForTile({
+            bbox: tile.bbox,
+            globalSeed,
+            eventTime,
+            toCell,
+            toLatLng,
+            heatAt,
+            neighbours,
+            steps,
+            ...(threshold === undefined ? {} : { threshold }),
+          })
+        : bestPickOverField({
+            cells: cellsOfTile(tile),
+            globalSeed,
+            eventTime,
+            toLatLng,
+            heatAt,
+            neighbours,
+            ...(threshold === undefined ? {} : { threshold }),
+          });
     if (pick !== undefined) picks.push(pick);
+  }
+
+  // ONE PICK PER SPOT, by a rule with no user in it. Ranked by heat, then by
+  // cell id for an exact tie, and kept only when no already-kept pick is the
+  // same spot — so the survivor of a merged pair is decided by the picks
+  // alone, never by where the user stood (a nearest-wins tie-break would have
+  // moved the marker with a ten-metre walk, which is the report this answers).
+  // Coverage still decides WHICH tiles were searched: a device that has not
+  // loaded the neighbour sees that tile's pick alone, and may therefore show
+  // the other cell of a shared plateau — a disagreement bounded by the
+  // caller's separation, about a spot that is the same place. See `GeoEvent`.
+  const kept: BestPick[] = [];
+  if (sameSpot === undefined) {
+    kept.push(...picks);
+  } else {
+    const ranked = [...picks].sort(byHeatThenCell);
+    for (const pick of ranked) {
+      if (!kept.some((winner) => sameSpot(winner.cell, pick.cell))) {
+        kept.push(pick);
+      }
+    }
   }
 
   // PLANAR, not great-circle. These are candidates inside adjacent tiles a
@@ -546,6 +636,188 @@ export function newGeoEventFor({
   // `ToLatLong(x.ExactGeoHash)` (`GeoEvent.cs:107`) — where the climb ended.
   // Ordering by `candidate` ranks tiles by a point the event is not at, so a
   // caller's "nearest event" would quote a distance to nothing.
-  picks.sort((a, b) => distanceTo(a.position) - distanceTo(b.position));
-  return { eventTime, picks, tilesSearched: tiles.length };
+  kept.sort((a, b) => distanceTo(a.position) - distanceTo(b.position));
+  return { eventTime, picks: kept, tilesSearched: tiles.length };
+}
+
+/** One peak found by an exhaustive scan, with the heat that ranked it. */
+export interface RankedPeak {
+  readonly cell: string;
+  /** Neighbourhood heat — the cell plus its neighbours, as the climb uses. */
+  readonly heat: number;
+}
+
+/**
+ * The best SEPARATED places in a field, ranked — an exhaustive alternative to
+ * climbing (DEC-A5).
+ *
+ * WHY THIS EXISTS. `climbToLocalMaximum` samples: it drops candidates at random
+ * and walks each a little way uphill, so it finds a peak only when a candidate
+ * lands on one. Measured over a field with a single obvious maximum, the event
+ * landed on it **0 times out of 24**. Two attempts to widen the sampling were
+ * refuted on one invariant — *anything that searches more of the tile must score
+ * more of the tile* — and the arithmetic then pointed somewhere unexpected: a
+ * res-8 event tile holds only **343 res-11 chunks**, which is FEWER than a climb
+ * with useful reach needs. Once they are all scored there is nothing left to
+ * search for; the answer can simply be read off.
+ *
+ * **SEPARATION IS THE WHOLE DIFFICULTY, not the ranking.** The top cells of any
+ * real field are neighbours of each other — one hill yields its summit and the
+ * six cells around it — so a naive "top N" returns one place N times. Each pick
+ * therefore excludes its own neighbourhood from those that follow.
+ *
+ * **WHY N AND NOT JUST THE MAXIMUM**, which is the non-obvious half. Event
+ * positions **rotate every quarter hour** and must stay identical across clients
+ * that share a seed. Returning the single global maximum would make the event
+ * *static forever* — a regression against a documented behaviour, dressed as a
+ * fix. So this returns a ranked shortlist and the caller's existing time seed
+ * chooses within it: the best ground is always in the running, and which of the
+ * good places wins still rotates.
+ *
+ * `heatAt` returning `undefined` means unscored, and an unscored cell is skipped
+ * rather than treated as cold — the distinction `cellState` exists to preserve.
+ */
+export function rankedPeaks({
+  cells,
+  heatAt,
+  neighbours,
+  topN,
+}: {
+  cells: Iterable<string>;
+  heatAt: (cell: string) => number | undefined;
+  neighbours: (cell: string) => readonly string[];
+  topN: number;
+}): RankedPeak[] {
+  const scored: RankedPeak[] = [];
+  for (const cell of cells) {
+    const own = heatAt(cell);
+    if (own === undefined) continue;
+    let heat = own;
+    for (const around of neighbours(cell)) {
+      if (around === cell) continue;
+      heat += heatAt(around) ?? 0;
+    }
+    scored.push({ cell, heat });
+  }
+
+  // Ties broken by cell id so the order is total and reproducible. Two chunks of
+  // identical heat are common in sparse ground, and a result that depended on
+  // Map iteration order would differ between clients that must agree.
+  scored.sort(byHeatThenCell);
+
+  const picked: RankedPeak[] = [];
+  const excluded = new Set<string>();
+  for (const peak of scored) {
+    if (picked.length >= topN) break;
+    if (excluded.has(peak.cell)) continue;
+    picked.push(peak);
+    excluded.add(peak.cell);
+    for (const around of neighbours(peak.cell)) excluded.add(around);
+  }
+  return picked;
+}
+
+/**
+ * How many separated peaks the exhaustive search shortlists per tile.
+ *
+ * **NOT ONE, and that is the point.** Event positions rotate every quarter hour
+ * and must be identical across clients sharing a seed, so returning the single
+ * global maximum would make the event *static forever* — a regression dressed as
+ * a fix. Six keeps the best ground always in the running while leaving something
+ * for the time seed to choose between.
+ */
+export const EXHAUSTIVE_SHORTLIST = 6;
+
+/**
+ * The best pick for one tile by SCANNING it, rather than by climbing to it.
+ *
+ * The exhaustive counterpart to {@link bestPickForTile}. Given every cell of the
+ * tile whose heat is known, it ranks separated peaks and lets the time seed pick
+ * among the top {@link EXHAUSTIVE_SHORTLIST}.
+ *
+ * **Why scanning is affordable, which is the non-obvious part.** A res-8 event
+ * tile holds only **343 res-11 chunks** to SCORE — fewer than a hill climb with
+ * useful reach needs (a 5-step res-11 climb needs ~684 against a 488-chunk cache
+ * cap). Once they are scored there is nothing left to search for.
+ *
+ * **TWO COSTS, AND AN EARLIER VERSION OF THIS COMMENT CONFLATED THEM.** 343 is
+ * what must be SCORED. The scan itself is handed every res-13 cell of the tile —
+ * **16 807** — each costing a `gridDisk` plus seven `heatAt` calls. So the
+ * affordability argument covers the scoring and says nothing about the ranking,
+ * whose cost has not been measured.
+ *
+ * **The same quality gate as the climb**, `heat > neighbours(cell).length ×
+ * threshold`, so an event is still never placed where the map itself says the
+ * ground is unusable. Shared deliberately: two gates that drifted would put
+ * events somewhere the heat map draws as empty.
+ *
+ * `candidate` is the chosen position rather than a pre-climb seed, because
+ * nothing was climbed. Reported anyway so `BestPick`'s shape is unchanged for
+ * the map, which draws `candidate` beside `position` to show what the search did.
+ */
+export function bestPickOverField({
+  cells,
+  globalSeed,
+  eventTime,
+  toLatLng,
+  heatAt,
+  neighbours,
+  threshold = 1,
+}: {
+  cells: Iterable<string>;
+  globalSeed: number;
+  eventTime: number;
+  toLatLng: (cell: string) => LatLng;
+  heatAt: (cell: string) => number | undefined;
+  neighbours: (cell: string) => readonly string[];
+  threshold?: number;
+}): BestPick | undefined {
+  const peaks = rankedPeaks({
+    cells,
+    heatAt,
+    neighbours,
+    topN: EXHAUSTIVE_SHORTLIST,
+  }).filter((peak) => peak.heat > neighbours(peak.cell).length * threshold);
+
+  if (peaks.length === 0) return undefined;
+
+  // THE SAME QUANTISATION THE SEEDED CANDIDATES USE — whole minutes — so two
+  // clients whose clocks differ by seconds still agree. Indexing a ranked list
+  // rather than generating a position keeps the choice inside the shortlist,
+  // which is what makes the best ground always a live option.
+  const minute = Math.floor(eventTime / MINUTE_MS);
+  const roll = stableHash(`geo-event-pick:${globalSeed}:${minute}`);
+
+  // WEIGHTED BY HEAT, NOT UNIFORM, and the difference is the whole feature.
+  //
+  // A uniform roll over the shortlist throws the ranking away: the best ground
+  // would win exactly 1 time in `EXHAUSTIVE_SHORTLIST`, which over a field with
+  // one real peak and five bumps is 1 in 6 — barely better than the sampling
+  // this replaced, after paying to scan the whole tile. Weighting by heat keeps
+  // every shortlisted place reachable (so the event still rotates) while making
+  // the best one much the likeliest.
+  //
+  // Arithmetic on the test fixture: a peak at 560 against five bumps at 84 wins
+  // 560/980 = 57 % of quarter hours rather than 17 %.
+  const total = peaks.reduce((sum, peak) => sum + peak.heat, 0);
+  let ticket = total > 0 ? roll % Math.ceil(total) : 0;
+  let chosen = peaks[0] as RankedPeak;
+  for (const peak of peaks) {
+    if (ticket < peak.heat) {
+      chosen = peak;
+      break;
+    }
+    ticket -= peak.heat;
+  }
+
+  return {
+    candidate: toLatLng(chosen.cell),
+    cell: chosen.cell,
+    position: toLatLng(chosen.cell),
+    heat: chosen.heat,
+    // What it beat, which is what the map draws. The runners-up are genuinely
+    // the alternatives here, rather than the discarded random seeds the climb
+    // reported — a more honest picture of what the search considered.
+    evaluated: peaks.map((peak) => toLatLng(peak.cell)),
+  };
 }

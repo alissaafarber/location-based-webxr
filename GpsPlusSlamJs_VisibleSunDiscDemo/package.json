@@ -10,13 +10,15 @@
     "build:framework": "pnpm --filter gps-plus-slam-app-framework run build",
     "preview": "vite preview"
   },
-  "engines": { "node": ">=22.14.0" },
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "dependencies": {
     "gps-plus-slam-app-framework": "workspace:*",
-    "three": "^0.184.0"
+    "three": "^0.185.0"
   },
   "devDependencies": {
-    "@types/three": "^0.184.1",
+    "@types/three": "^0.185.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.12"
   },

@@ -87,8 +87,15 @@ import {
   updateSyncStatus,
   setAbsCompassStatus,
   hideAbsCompass,
+  hideQrStatus,
 } from '../ui/hud';
 import { showSessionSummary } from '../ui/session-summary';
+import {
+  createQrLevelZipContributor,
+  type QrAnchorOutcome,
+} from '../qr/qr-level-zip-contributor';
+import type { QrSightingFeeder } from '../qr/qr-sighting-feeder';
+import { QR_LAUNCH_HOSTS } from '../qr/qr-launch-hosts';
 import { showConfirmDialog } from '../ui/confirm-dialog';
 import {
   enableBeforeUnloadWarning,
@@ -187,6 +194,8 @@ export interface RecordingSessionDeps {
   getRecordingOptions: () => RecordingOptions;
   /** Access the map overlay (may be null if AR not started). */
   getMapOverlay: () => LeafletMapOverlay | null;
+  /** The session QR sighting fold, or null when QR recording is off. */
+  getQrSightingFeeder: () => QrSightingFeeder | null;
   /** Read session notes from UI. */
   getSessionNotes: () => string;
   /** Wait for GPS zero reference (polling store, owned by main.ts). */
@@ -247,6 +256,9 @@ export function createRecordingSessionHandlers(
   let captureFailureTracker: FailureTracker | null = null;
   let currentSessionName = '';
   let syncManager: SyncManager | null = null;
+  /** What the last contributor run decided per code — shown on the summary
+   *  screen, so a declined anchor is visible rather than just absent. */
+  let latestQrAnchorOutcomes: readonly QrAnchorOutcome[] = [];
   let lastSyncResult: ZipExportResult | null = null;
   let backDuringRecordingInProgress = false;
   let stopInProgress = false;
@@ -304,6 +316,16 @@ export function createRecordingSessionHandlers(
         getCurrentScenarioHandle(),
         currentSessionName
       ),
+      createQrLevelZipContributor({
+        // Reads the maintained sighting fold, never a re-parse of `actions/`
+        // — this runs on every crash-safety sync, not only at save.
+        getFeeder: () => deps.getQrSightingFeeder(),
+        allowedHosts: QR_LAUNCH_HOSTS,
+        nowIso: () => new Date().toISOString(),
+        onOutcomes: (outcomes) => {
+          latestQrAnchorOutcomes = outcomes;
+        },
+      }),
       createColmapZipContributor({
         getFrames: () => selectFrameTilesInWebXR(deps.getStore().getState()),
         getProjectionMatrix: () =>
@@ -625,11 +647,15 @@ export function createRecordingSessionHandlers(
    * Stop everything that actively FEEDS a recording — captures, sensor
    * watches, the off-thread quality analyzer — plus their HUD readouts. The
    * ONE teardown for this resource cluster, shared by `performStop` (the
-   * ordered stop flow) and `cleanupForNewRecording` (the XR-session-end /
-   * start-over path), which previously skipped it and left the camera/GPS
-   * feeds and the analyzer Worker running (recurring PR #115/#120/#123 review
-   * finding). Every call is idempotent, so running it on an already-stopped
-   * session is a no-op.
+   * ordered stop flow) and `cleanupForNewRecording` (the start-over path),
+   * which previously skipped it and left the camera/GPS feeds and the analyzer
+   * Worker running (recurring PR #115/#120/#123 review finding). Every call is
+   * idempotent, so running it on an already-stopped session is a no-op.
+   *
+   * NOT the XR-session-end path, despite what this comment said until
+   * 2026-08-17: a system-ended XRSession is handled by `system-session-end.ts`,
+   * which calls the regular `handleStopRecording` — so that path reaches this
+   * function through `performStop`, never through `cleanupForNewRecording`.
    */
   function stopLiveFeeds(): void {
     stopImageCapture();
@@ -646,6 +672,7 @@ export function createRecordingSessionHandlers(
     stopAbsCompassHudUpdates();
     stopAbsoluteOrientationWatch();
     hideAbsCompass();
+    hideQrStatus();
   }
 
   async function performStop(): Promise<void> {
@@ -735,8 +762,8 @@ export function createRecordingSessionHandlers(
 
     // Final sync before stopping. Capture the manager into a local and claim
     // ownership (null the shared field) *before* the await, so any concurrent
-    // teardown path (a second stop, cleanupForNewRecording on an XR
-    // session-end) sees null and no-ops instead of stopping it from under us.
+    // teardown path (a second stop, or cleanupForNewRecording) sees null and
+    // no-ops instead of stopping it from under us.
     // Defense in depth alongside the re-entrancy guard (Sentry issue 7319627943).
     const sm = syncManager;
     syncManager = null;
@@ -813,6 +840,9 @@ export function createRecordingSessionHandlers(
       imageCount,
       depthSampleCount,
       errors,
+      // Whatever the last contributor run decided per code — including the
+      // refusals, which are invisible in the zip itself.
+      qrAnchors: latestQrAnchorOutcomes,
       failedWriteCount: state.recording.failedWriteCount,
       gpsPositions,
       odometryPositions: gpsEvents?.odometryPositions ?? [],
@@ -828,6 +858,10 @@ export function createRecordingSessionHandlers(
 
     // Clean up sync result reference
     lastSyncResult = null;
+    // Never carry a previous recording's verdicts into this one's summary:
+    // a session with QR off writes no outcomes, so a stale list would be
+    // shown as if it described the recording just finished.
+    latestQrAnchorOutcomes = [];
 
     log.info('Session summary:', summaryData);
 
@@ -868,9 +902,18 @@ export function createRecordingSessionHandlers(
 
   // --- Lifecycle ---
 
+  /**
+   * The START-OVER teardown. Its only production caller is `main.ts`'s
+   * `resetForNewRecording()`, which is reached exclusively from the SUMMARY
+   * screen ("New recording", or Back from the summary) — i.e. always after
+   * `performStop()` has already run. That is why it does not disable the
+   * `beforeunload` warning: `performStop` disabled it on the way here, and
+   * there is no path that reaches this function with a recording still live.
+   * If a caller is ever added that can, the warning must be disabled here too.
+   */
   function cleanupForNewRecording(): void {
-    // Teardown parity with performStop: this path (XR session end, start-over)
-    // must also stop the captures/watches/analyzer, not only the bookkeeping.
+    // Teardown parity with performStop: this path must also stop the
+    // captures/watches/analyzer, not only the bookkeeping.
     stopLiveFeeds();
     if (unsubscribeStore) {
       unsubscribeStore();
@@ -891,6 +934,10 @@ export function createRecordingSessionHandlers(
       syncManager = null;
     }
     lastSyncResult = null;
+    // Never carry a previous recording's verdicts into this one's summary:
+    // a session with QR off writes no outcomes, so a stale list would be
+    // shown as if it described the recording just finished.
+    latestQrAnchorOutcomes = [];
 
     currentSessionName = '';
   }

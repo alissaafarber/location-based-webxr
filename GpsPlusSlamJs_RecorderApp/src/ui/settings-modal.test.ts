@@ -899,8 +899,7 @@ describe('settings-modal', () => {
         unknown
       >;
       const flags = saved.arCrashIsolation as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       expect(flags?.enableCss3dRenderer).toBe(false);
     });
   });
@@ -1030,12 +1029,16 @@ describe('settings-modal', () => {
       showSettingsModal();
     });
 
-    it('is present and defaults to OFF (opt-in until field-tuned)', () => {
+    it('is present and reflects the shipped default (ON since the tuning landed)', () => {
+      // Was "defaults to OFF (opt-in until field-tuned)". The tuning happened:
+      // 156 hand-labelled frames put k = 0.8 at ~0.98 precision, and the gate
+      // ships enabled. The toggle must show the truth, or the settings screen
+      // tells a user their captures are unfiltered when they are not.
       const cb = document.getElementById(
         'images-quality-filter'
       ) as HTMLInputElement | null;
       expect(cb).not.toBeNull();
-      expect(cb!.checked).toBe(false);
+      expect(cb!.checked).toBe(true);
     });
 
     it('persists qualityFilter.enabled = true when checked', () => {
@@ -1077,8 +1080,11 @@ describe('settings-modal', () => {
       ) as HTMLInputElement | null;
       expect(blur).not.toBeNull();
       expect(luma).not.toBeNull();
-      // Defaults from DEFAULT_QUALITY_FILTER (k=0.5, minMeanLuminance=10).
-      expect(parseFloat(blur!.value)).toBeCloseTo(0.5, 6);
+      // Defaults from DEFAULT_QUALITY_FILTER (k=0.8 since 2026-08-20,
+      // minMeanLuminance=10). k was 0.5 while the threshold was a placeholder;
+      // the corpus benchmark moved it to 0.8, where ~30 % of frames are
+      // rejected at ~0.98 precision against the degraded/sharp boundary.
+      expect(parseFloat(blur!.value)).toBeCloseTo(0.8, 6);
       expect(parseFloat(luma!.value)).toBeCloseTo(10, 6);
     });
 
@@ -1122,15 +1128,22 @@ describe('settings-modal', () => {
         'images-min-luminance'
       ) as HTMLInputElement;
 
-      // Gate off (the default) → sliders disabled.
+      // Gate on (the shipped default since 2026-08-20) → sliders enabled.
+      expect(blur.disabled).toBe(false);
+      expect(luma.disabled).toBe(false);
+
+      // Gate off → sliders disabled. This is the direction the test is named
+      // for, and it is now the one that has to be driven rather than assumed.
+      qualityFilter.checked = false;
+      qualityFilter.dispatchEvent(new Event('change'));
       expect(blur.disabled).toBe(true);
       expect(luma.disabled).toBe(true);
 
-      // Gate on → sliders enabled.
+      // Back on, so the capture-off override below is tested against a gate
+      // that would otherwise leave the sliders enabled.
       qualityFilter.checked = true;
       qualityFilter.dispatchEvent(new Event('change'));
       expect(blur.disabled).toBe(false);
-      expect(luma.disabled).toBe(false);
 
       // Capture off overrides → sliders disabled regardless of the gate.
       imagesEnabled.checked = false;
@@ -1187,9 +1200,15 @@ describe('settings-modal', () => {
         'images-blur-metric'
       ) as HTMLSelectElement;
 
-      // Gate off (the default) → select disabled.
+      // Gate on (the shipped default) → select enabled.
+      expect(select.disabled).toBe(false);
+
+      // Gate off → select disabled, which is what this test is named for.
+      qualityFilter.checked = false;
+      qualityFilter.dispatchEvent(new Event('change'));
       expect(select.disabled).toBe(true);
 
+      // Back on, then capture off — the override must win over the gate.
       qualityFilter.checked = true;
       qualityFilter.dispatchEvent(new Event('change'));
       expect(select.disabled).toBe(false);
@@ -1275,7 +1294,7 @@ describe('settings-modal', () => {
       // 2026-07-19 field-test toggles (enablement plan): the experiment combo
       // (prior + tolerance 15° + C′) and the alternative robust-solver comparison arm.
       ['compass-experiment', 'experiment'],
-      ['compass-robust-solver-comparison', 'robustSolverComparison'],
+      ['compass-consensus-solver-comparison', 'consensusSolverComparison'],
     ] as const;
 
     const COMPASS_DEFAULT_CHECKED: Record<
@@ -1286,7 +1305,7 @@ describe('settings-modal', () => {
       rotationPrior: false,
       webXRConsistency: false,
       experiment: false,
-      robustSolverComparison: false,
+      consensusSolverComparison: false,
     };
 
     it('default checkbox states match the per-flag defaults (Stage 0 on, others off)', () => {
@@ -1561,8 +1580,7 @@ describe('settings-modal', () => {
 
       const working = getWorkingOptions() as Record<string, unknown> | null;
       const flags = working?.arCrashIsolation as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
 
       expect(working?.images).toEqual(
         expect.objectContaining({ enabled: false })
@@ -1604,8 +1622,7 @@ describe('settings-modal', () => {
         unknown
       >;
       const flags = saved.arCrashIsolation as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       expect(flags?.applyChromiumProjectionLayerWorkaround).toBe(false);
     });
 

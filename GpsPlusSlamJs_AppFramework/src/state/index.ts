@@ -14,6 +14,11 @@ export {
   recordingReducer,
 } from './recording-slice.js';
 
+// --- diagnostics-action (log-only notes an app makes about itself; recorded
+//     into the action stream, consumed by no reducer — owner decision
+//     2026-08-23). ---
+export { type DiagnosticNote, recordDiagnostic } from './diagnostics-action.js';
+
 // --- tracking-slice (AR tracking state machine; ports the AR-tracking
 //     state machine that previously lived in `ar/tracking-state.ts` — see
 //     P2 step 2 in 2026-05-07-csharp-features-not-yet-ported.md). ---
@@ -94,10 +99,64 @@ export {
 // --- library re-exports (kept here for backwards-compat with existing
 //     `gps-plus-slam-app-framework/state` imports). ---
 export {
+  teardownArSessionState,
+  type ArTeardownStore,
+} from './ar-session-teardown.js';
+
+export {
   setZeroPos,
+  // Drops per-session odometry↔GPS pairs while keeping the zero — the AR
+  // session-end teardown action (core 1.20; the re-entry blend fix).
+  resetGpsSessionData,
   recordGpsEvent,
   add2dImage,
   calcRelativeCoordsInMeters,
+  // The compass-influence setters, re-exported for the same reason as the rest
+  // of this block: a consumer app dispatches them into the store this package
+  // builds, and adding `gps-plus-slam-js` as a second direct dependency of every
+  // such app just to reach four action creators would be a worse surface.
+  //
+  // ALL OF THEM TOGETHER, deliberately. "The compass has no influence" is not
+  // one setting: at vote weight 0 the steady-state formula is `1 − observability`,
+  // a full override precisely when yaw is poorly observable, and disabling the
+  // rotation prior falls through to the cold-start override, whose curve is
+  // identical and which has been default-ON since 2026-07-25. Exporting a
+  // subset would invite exactly the two-setting mistake.
+  setColdStartOverrideEnabled,
+  setCompassRotationPriorEnabled,
+  setCompassExperimentEnabled,
+  setCompassVoteWeight,
+  // ADDED 2026-08-20 with the three-way trust gate and the split experiment
+  // combo. Without these three the library work is unreachable from any app:
+  // consumers import every compass setter from THIS package (that is the whole
+  // point of the block), so a new action in `gps-plus-slam-js` is invisible
+  // until it is listed here. A cold review caught the omission — the plan had
+  // accounted for the npm publish and missed this second hop entirely.
+  setCompassWebXRConsistencyEnabled,
+  setCompassTrustGateMode,
+  setCompassPairSelectionEnabled,
+  setCompassTrustAgreeToleranceDeg,
+  // The readout half. Publishing observability and the applied weight is
+  // pointless if no consumer can select them, and the same "second hop" applies.
+  getCompassDiagnostics,
+  // ADDED 2026-09-02 with core 1.23.0 for the recorder's in-recording field
+  // wheel (rotation-first search plan D6-D8): a whole preset in public names,
+  // the hard pair-selection mode and its trust prerequisite, the robust
+  // solver's heading penalty, and the mode lists consumers derive their
+  // dropdowns from instead of mirroring the unions (a mirrored union is how a
+  // fourth gate mode would have compiled everywhere and appeared nowhere).
+  setAlignmentOverrides,
+  setCompassPairSelectionMode,
+  setCompassPairSelectionRequireTrust,
+  setConsensusSolverHeadingPenalty,
+  ALIGNMENT_OVERRIDE_KEYS,
+  COMPASS_TRUST_GATE_MODES,
+  COMPASS_PAIR_SELECTION_MODES,
+} from 'gps-plus-slam-js';
+export type {
+  CompassTrustGateMode,
+  CompassPairSelectionMode,
+  AlignmentOverrides,
 } from 'gps-plus-slam-js';
 export type {
   LatLong,
@@ -141,7 +200,7 @@ export {
 //     (`OCCLUDER_DEBUG_STYLES` / `OccluderDebugStyle`). ---
 
 // --- recording-replayer ---
-export { replayRecording } from './recording-replayer.js';
+export { replayActions, replayRecording } from './recording-replayer.js';
 export type { ReplayRecordingOptions } from './recording-replayer.js';
 
 // --- persistence-middleware ---

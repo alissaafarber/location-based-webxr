@@ -30,8 +30,11 @@ import {
   setFolderImportProgress,
   updateTrackingQuality,
 } from '../ui/hud';
+import { hideSetupModal } from '../ui/hud-setup-panel';
 import { showSessionSummary } from '../ui/session-summary';
 import { showLogPanel, hideLogPanel, toggleLogPanel } from '../ui/log-panel';
+import { showToast } from '../ui/toast';
+import type { DebugWheel } from '../ui/hud-debug-wheel';
 import { createMapBrowser } from '../ui/map-browser';
 import { type RecordingCoverage } from '../ui/recording-index';
 import { gpsPathToCoverageCells } from 'gps-plus-slam-app-framework/geo';
@@ -88,6 +91,8 @@ function fixtureToRecordingCoverage(
 export interface E2eHookDeps {
   /** main.ts's shared full-bleed map-browser root (also used by the real replay path). */
   ensureMapBrowserRoot: () => HTMLElement;
+  /** The in-recording settings wheel, or null without `?debug=1` (2026-09-02). */
+  getDebugWheel: () => DebugWheel | null;
 }
 
 /**
@@ -95,9 +100,20 @@ export interface E2eHookDeps {
  * functions instead of simulating DOM changes.
  */
 export function installE2eTestHooks(deps: E2eHookDeps): void {
-  const { ensureMapBrowserRoot } = deps;
+  const { ensureMapBrowserRoot, getDebugWheel } = deps;
   window.testHooks = {
     populateScenarios,
+    // The in-recording settings wheel (2026-09-02): lets a spec read what the
+    // wheel holds after a tap, and prove the gear is absent without the flag
+    // (null) - dispatch itself is unit-tested, e2e proves gating + wiring.
+    // Hide the setup modal the way Enter AR does, so a spec can reach the HUD
+    // controls the modal covers (the debug wheel's gear) without a real AR
+    // session.
+    hideSetupModal,
+    getDebugWheelValues: () => {
+      const wheel = getDebugWheel();
+      return wheel ? { ...wheel.values(), touched: wheel.touched() } : null;
+    },
     validateEnterButton,
     showRecordingControls,
     hideRecordingControls,
@@ -106,7 +122,13 @@ export function installE2eTestHooks(deps: E2eHookDeps): void {
     updateArInfo,
     updatePermissionStatus,
     setPermissionsReady,
-    // Log panel hooks (Issue #5)
+    // Toast (2026-08-24). The toast is the ONLY UI in this app rewritten onto
+    // the framework's shared mechanism, and it had no e2e coverage at all â
+    // the suite mentioned the word once, in a comment. Its two new behaviours
+    // (attach-on-show, and a text write deferred by one task) are exactly the
+    // kind that a jsdom suite can assert and a real browser can still get
+    // wrong, so the hook exists to let a spec watch the real element.
+    showToast,
     showLogPanel,
     hideLogPanel,
     toggleLogPanel,

@@ -13,16 +13,15 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%23ef4444'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%23fff'/%3E%3C/svg%3E"
       type="image/svg+xml"
     />
-    <!-- Leaflet CSS (for session summary map - Issue #4, 2026-01-27) -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- App styles (behavioral CSS + log/legend colors) -->
+    <!-- Styles are LINKED here as local files under /styles/ — Tailwind's
+         build output, a vendored Leaflet CSS, and the app's own — never a CDN
+         (see `styles/tailwind.css` for what the CDN cost when it was slow).
+         `no-external-page-assets.test.ts` pins exactly these link tags. This
+         comment claimed the opposite ("imported from src/main.ts, not linked")
+         until the PR #329 review caught the leftover from an earlier attempt
+         at the swap. -->
+    <link rel="stylesheet" href="/styles/tailwind.css" />
+    <link rel="stylesheet" href="/styles/leaflet.css" />
     <link rel="stylesheet" href="/styles/app.css" />
   </head>
   <body class="bg-black text-white font-sans">
@@ -58,6 +57,14 @@
           >
             <span class="text-gray-400">🧭 AbsCompass:</span>
             <span id="abs-compass-status" class="text-green-400">--</span>
+          </div>
+          <div
+            id="qr-info"
+            class="text-sm mt-1 hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <span id="qr-status" class="text-green-400">--</span>
           </div>
           <div id="frame-count-info" class="text-sm mt-1 hidden">
             <span class="text-gray-400">📷 Frames:</span>
@@ -449,6 +456,22 @@
             </div>
           </div>
 
+          <!-- QR anchors: what this recording decided about each printed
+               code it saw. A DECLINED code has to be visible here, because
+               "absent" and "refused" look identical in the zip. -->
+          <div
+            id="summary-qr-anchors-block"
+            class="bg-gray-700/50 rounded-lg p-3 mb-4 hidden"
+          >
+            <h2 class="text-sm font-medium text-gray-300 mb-2">
+              🔳 Printed codes
+            </h2>
+            <pre
+              id="summary-qr-anchors"
+              class="text-xs text-gray-200 whitespace-pre-wrap max-h-32 overflow-y-auto"
+            ></pre>
+          </div>
+
           <!-- Error Log -->
           <div class="bg-gray-700/50 rounded-lg p-3 mb-4">
             <h2 class="text-sm font-medium text-gray-300 mb-2">
@@ -458,8 +481,7 @@
               id="summary-errors"
               class="text-xs text-red-300 whitespace-pre-wrap max-h-24 overflow-y-auto"
             >
-No errors</pre
-            >
+No errors</pre>
           </div>
 
           <!-- Actions -->
@@ -1408,6 +1430,25 @@ No errors</pre
                   >Detect &amp; record QR codes (RAW)</span
                 >
               </label>
+              <!-- Moved here from Depth Sampling (2026-09-08): the one control
+                   that CONSUMES printed codes belongs with the detection
+                   controls it depends on (Tour Viewer feedback F4). -->
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="qr-use-levels"
+                  class="w-4 h-4 accent-blue-500"
+                />
+                <span class="text-sm text-gray-200"
+                  >Use codes to improve this recording</span
+                >
+              </label>
+              <p class="text-xs text-gray-400 pl-6">
+                Downloads what a printed code knows about where it is, and feeds
+                it into this session's positioning. Leave this off for
+                recordings you want to analyse later — it adds computed GPS
+                readings alongside the real ones.
+              </p>
               <div class="space-y-1">
                 <div class="flex justify-between text-xs text-gray-400">
                   <span>Detection Interval</span>
@@ -1625,7 +1666,7 @@ No errors</pre
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  id="compass-robust-solver-comparison"
+                  id="compass-consensus-solver-comparison"
                   class="w-4 h-4 accent-blue-500"
                 />
                 <span class="text-sm text-gray-200"

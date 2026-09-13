@@ -17,13 +17,15 @@
  */
 
 import L from "leaflet";
+
+import { AttributionView, type AttributionEntry } from "./attribution-view.js";
 import { cellToBoundary } from "h3-js";
 import type { CellScore, GeoEvent, LatLng, Region } from "gps-plus-slam-osm";
 
 import { describeEventTime } from "./event-label.js";
 import { describeScale, type HeatScale } from "./heat-colours.js";
 import { tileBounds } from "./fetch-extent.js";
-import { escapeHtml } from "./escape-html.js";
+import { escapeHtml } from "gps-plus-slam-app-framework/utils/escape-html";
 import { regionStyle } from "./region-style.js";
 import { QUEST_MARKER_PX, questMarkerSvg } from "./quest-marker.js";
 import {
@@ -45,6 +47,16 @@ import {
  * both the basemap tiles and data derived from OSM, so it is doubly required.
  */
 const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
+
+/**
+ * The OSM credit as the attribution line renders it: a permanently visible
+ * short name, with the full sentence behind the expander (DEC-W1).
+ */
+const OSM_ENTRY: AttributionEntry = {
+  short: "OpenStreetMap",
+  full: OSM_ATTRIBUTION,
+  href: "https://www.openstreetmap.org/copyright",
+};
 
 export interface MapViewOptions {
   readonly container: HTMLElement;
@@ -74,20 +86,144 @@ export class MapView {
   private readonly userMarker: L.CircleMarker;
   private readonly onCellClick: ((cell: string) => void) | undefined;
   private readonly onRegionClick: ((region: string) => void) | undefined;
-  /** The DEM credit currently in the attribution bar, so it can be removed. */
-  private terrainCredit: string | undefined;
+  /**
+   * The attribution line, which this class owns rather than Leaflet.
+   *
+   * See `attribution-view.ts` for why: Leaflet's own control rebuilds its
+   * `innerHTML` on every credit change, which happens on every terrain apply,
+   * so an expander could not survive inside it.
+   */
+  private readonly attribution = new AttributionView();
+
+  /**
+   * Keeps Leaflet's CACHED container size honest.
+   *
+   * Leaflet measures the container once, in `L.map(...)`, and reuses that
+   * size for every projection afterwards. `trackResize` (on by default)
+   * refreshes it on a WINDOW resize only — a container that changes size
+   * because this page's own layout changed never reaches it.
+   *
+   * That is not hypothetical here. Measured 2026-08-21: the cache was ~122 px
+   * TALLER than the real container, so `setView` centred its target at
+   * `cachedHeight / 2` and left it **61 px below the visible centre** — every
+   * pan, every `centreOn`, and the initial view. It surfaced as a geo-event
+   * quest that landed near the middle instead of in it, and it had been
+   * invisible because the e2e that measures exactly this allowed 80 px.
+   *
+   * Held as a field so a future `dispose` can disconnect it; there is no
+   * teardown path on this view today, and the observer lives as long as the
+   * map does.
+   */
+  private readonly containerResize: ResizeObserver | undefined;
+
+  /**
+   * FORENSICS FOR THE GEO-EVENT SETTLE FLAKE, not a feature (docs:
+   * `2026-08-26-0105-osm-demo-geo-event-settle-flake-followup.md` — the
+   * owner-approved instrumentation step). Failing runs report the winner
+   * marker stuck at exactly HALF a recent `#map` height delta for a full
+   * 15 s poll, which the one-frame `invalidateSize` model cannot explain —
+   * it predicts the observer corrects it. This records whether the
+   * callback actually fired (count), what sizes it saw (bounded history),
+   * and when it last invalidated, so the NEXT failing run is attributable
+   * instead of guessed at — the spec's history holds two failed guesses
+   * already. Exposed to the e2e via `globalThis.__osmDemoMapDiagnostics`;
+   * remove both together once the flake is explained and fixed.
+   */
+  private readonly resizeDiagnostics: {
+    fires: number;
+    lastInvalidateAt: number | null;
+    history: { t: number; w: number; h: number }[];
+  } = { fires: 0, lastInvalidateAt: null, history: [] };
 
   constructor(options: MapViewOptions) {
     this.onCellClick = options.onCellClick;
     this.onRegionClick = options.onRegionClick;
-    this.map = L.map(options.container).setView(
-      [options.centre.lat, options.centre.lng],
-      options.zoom ?? 18,
-    );
+    this.map = L.map(options.container, {
+      // OFF, because this view supplies its own (DEC-W1, finding F5). Leaflet's
+      // default control also carries a courtesy "Leaflet" prefix link, which
+      // the thirteenth session asked to drop — switching the control off
+      // disposes of both in one move rather than needing `setPrefix(false)` as
+      // a second mechanism.
+      attributionControl: false,
+    }).setView([options.centre.lat, options.centre.lng], options.zoom ?? 18);
 
+    // Observed rather than called once: the layout that made the cache stale
+    // settles AFTER construction, and anything that resizes the map later
+    // (an opening panel, an orientation change) has the same effect. The
+    // observer fires immediately with the current size, so it also corrects
+    // whatever `L.map` measured a moment ago.
+    //
+    // Guarded because ResizeObserver does not exist in the jsdom environment
+    // the unit tests run in — the guard is what keeps this file importable
+    // there, not a claim that browsers might lack it.
+    this.containerResize =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver((entries) => {
+            // Diagnostics BEFORE the correction, so a callback that throws
+            // still leaves its trace. See the docblock on `resizeDiagnostics`.
+            this.resizeDiagnostics.fires += 1;
+            const rect = entries[0]?.contentRect;
+            if (rect !== undefined) {
+              this.resizeDiagnostics.history.push({
+                t: Math.round(performance.now()),
+                w: rect.width,
+                h: rect.height,
+              });
+              if (this.resizeDiagnostics.history.length > 20) {
+                this.resizeDiagnostics.history.shift();
+              }
+            }
+            this.map.invalidateSize();
+            this.resizeDiagnostics.lastInvalidateAt = Math.round(
+              performance.now(),
+            );
+          });
+    this.containerResize?.observe(options.container);
+    // The e2e reads this on a settle-poll timeout, and the e2e runs against
+    // the vite DEV server — so the global is DEV-gated and a production
+    // build statically drops it (the same prod-inert seam pattern the
+    // TourViewer uses; PR #365 review). The bounded per-instance recording
+    // above stays unconditional. Last-constructed MapView wins the global;
+    // the demo builds one.
+    if (import.meta.env.DEV)
+      (
+        globalThis as { __osmDemoMapDiagnostics?: unknown }
+      ).__osmDemoMapDiagnostics = {
+        resize: this.resizeDiagnostics,
+        leafletSize: () => {
+          const size = this.map.getSize();
+          return { w: size.x, h: size.y };
+        },
+        containerSize: () => {
+          const rect = options.container.getBoundingClientRect();
+          return { w: rect.width, h: rect.height };
+        },
+      };
+
+    // ADDED FIRST OF THIS CORNER'S CONTROLS, and that is load-bearing rather
+    // than incidental. Leaflet PREPENDS into a bottom corner
+    // (`corner.insertBefore(container, corner.firstChild)`), so the first
+    // control registered ends up lowest — which is where a credit belongs, with
+    // the AR and locate buttons stacking above it and never over it. An e2e
+    // asserts that relationship by bounding-box arithmetic.
+    const AttributionControl = L.Control.extend({
+      onAdd: (): HTMLElement => {
+        // Without this a tap on the expander also reaches the map underneath
+        // and reads as "the user clicked here to move" — the same guard
+        // `locate-control.ts` needs for the same reason.
+        L.DomEvent.disableClickPropagation(this.attribution.element);
+        return this.attribution.element;
+      },
+    });
+    new AttributionControl({ position: "bottomright" }).addTo(this.map);
+    this.attribution.setEntries([OSM_ENTRY]);
+
+    // NO `attribution` OPTION HERE ANY MORE. It fed Leaflet's control, which is
+    // switched off above, so leaving it would be a credit that looks declared
+    // and renders nowhere. `OSM_ENTRY` is where the obligation is actually met.
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: OSM_ATTRIBUTION,
     }).addTo(this.map);
 
     // Region outlines are drawn OVER the cells, and the group order here is
@@ -164,26 +300,25 @@ export class MapView {
   }
 
   /**
-   * Adds or removes the elevation source's credit in Leaflet's attribution bar.
+   * Adds or removes the elevation sources' credits in the attribution line.
    *
    * WHY IT LIVES HERE RATHER THAN IN THE HEADER (DEC-R2-4). The header became
    * collapsible, and **attribution may not be collapsed away** — it is required
-   * wherever the data is shown. Leaflet's attribution control is always visible
-   * and is where a credit conventionally goes.
+   * wherever the data is shown. The attribution line is always visible and is
+   * where a credit conventionally goes.
    *
-   * Passing `undefined` REMOVES it, which matters: crediting a DEM source whose
-   * tiles all failed would be a claim about what is on screen. Removal is
-   * idempotent, so a run of failed loads does not need to track what it added.
+   * WHAT "NOT COLLAPSED AWAY" MEANS SINCE ROUND THREE (DEC-W1). The line got an
+   * expander, and the elevation credits stay OUTSIDE it: each source keeps a
+   * permanently visible short name and only its long sentence is behind the
+   * tap. These credits are required "the same as the OSM one", so a design that
+   * hid them until tapped would contradict the paragraph above.
+   *
+   * An EMPTY list removes them, which matters: crediting a DEM source whose
+   * tiles all failed would be a claim about what is on screen. Idempotent, so a
+   * run of failed loads does not need to track what it added.
    */
-  setTerrainAttribution(credit: string | undefined): void {
-    const control = this.map.attributionControl;
-    if (this.terrainCredit !== undefined) {
-      control.removeAttribution(this.terrainCredit);
-      this.terrainCredit = undefined;
-    }
-    if (credit === undefined) return;
-    control.addAttribution(credit);
-    this.terrainCredit = credit;
+  setTerrainAttribution(entries: readonly AttributionEntry[]): void {
+    this.attribution.setEntries([OSM_ENTRY, ...entries]);
   }
 
   /**
@@ -200,7 +335,37 @@ export class MapView {
    */
   centreOn(position: { lat: number; lng: number }): void {
     this.setPosition(position);
-    this.map.setView([position.lat, position.lng], this.map.getZoom());
+    this.map.setView([position.lat, position.lng], this.map.getZoom(), {
+      animate: false,
+    });
+  }
+
+  /**
+   * Slides the viewport to `position` WITHOUT claiming the user is there.
+   *
+   * THE DIFFERENCE FROM {@link centreOn} IS THE WHOLE POINT, and reusing that
+   * one here would be a live bug: it calls {@link setPosition} first, so panning
+   * to a quest would also teleport the user's own marker onto it. `centreOn` is
+   * for a DECLARED place change (the location picker), where moving the marker
+   * is exactly right; this is for looking somewhere.
+   *
+   * Same zoom, deliberately (DEC-U12). Keeping it is what makes this a pan
+   * rather than the viewport takeover F56 declined.
+   */
+  panTo(position: { lat: number; lng: number }): void {
+    // `animate: false` ON BOTH PROGRAMMATIC PANS, and it is a bug fix, not a
+    // taste choice (settle-flake forensics, 2026-08-26 — the followup doc in
+    // the primary repo holds the captures). At the same zoom Leaflet runs
+    // setView as an ANIMATED pan (~250 ms) whose end transform is
+    // precomputed. When the container resizes inside that window — the
+    // status line reflowing as a search completes does exactly that — the
+    // ResizeObserver's `invalidateSize` compensation is a raw pane shift
+    // that the animation's end state then OVERWRITES, leaving the target
+    // exactly half the resize delta off centre, permanently (measured
+    // 21.17 px, 11 of 30 soak runs). An instant pan has no window to lose.
+    this.map.setView([position.lat, position.lng], this.map.getZoom(), {
+      animate: false,
+    });
   }
 
   /**
@@ -482,7 +647,8 @@ export class MapView {
         )
           .bindTooltip(
             // Escaped: `category` is a column header from the publicly editable
-            // rule sheet, and `bindTooltip` renders HTML. See `escape-html.ts`.
+            // rule sheet, and `bindTooltip` renders HTML. See the framework’s
+            // `escape-html.ts`.
             `${escapeHtml(region.category)}: ${region.cellCount} cells, ` +
               `${Math.round(region.areaM2)} m², median ${round(region.medianScore)}`,
           )
@@ -610,7 +776,8 @@ function popupFor(cell: CellScore, category: string, score: number): string {
 
   return (
     // `category` comes from the publicly editable rule sheet — see
-    // `escape-html.ts` for why the 20-character cap is not a mitigation.
+    // the framework’s `escape-html.ts` for why the 20-character cap is not a
+    // mitigation.
     `<strong>${escapeHtml(category)} = ${round(score)}</strong><br>` +
     (lines.length > 0
       ? lines.join("<br>") + more

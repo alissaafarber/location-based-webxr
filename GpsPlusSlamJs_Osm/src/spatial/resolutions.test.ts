@@ -20,12 +20,15 @@ import {
   getHexagonAreaAvg,
   cellToChildren,
   getResolution,
+  gridDisk,
   latLngToCell,
   UNITS,
 } from "h3-js";
 import {
   EVENT_TILE_RES,
   FETCH_RES,
+  MIN_PICK_SEPARATION_STEPS,
+  isSameQuestSpot,
   SCORE_CHUNK_RES,
   AFFORDANCE_RES,
   FETCH_DISK_RADIUS,
@@ -190,7 +193,7 @@ describe("fetch coverage is DERIVED from the score working set, not guessed", ()
   // Why these tests matter:
   // The movement trigger used to fetch "the tile I am in, plus one ring" — a
   // fixed guess that over-fetches in the interior and can still under-fetch at
-  // a boundary. With FETCH_RES = 7 a fixed ring costs ~140 MB, so the guess got
+  // a boundary. With FETCH_RES = 7 a fixed ring costs ~150 MB (7 tiles x ~21 MB), so the guess got
   // expensive at exactly the moment it stopped being needed. Deriving the tile
   // set from the chunks we are actually going to score is both cheaper and
   // strictly more correct, and it stays correct if either resolution moves.
@@ -296,11 +299,12 @@ describe("scoreWorkingSet — progressive radii (W16, DEC-R2-30)", () => {
     expect(scoreWorkingSet(CHUNK, 2.7)).toEqual(scoreWorkingSet(CHUNK, 2));
   });
 
-  it("reaches 61 chunks at the maximum radius", () => {
-    // 1 + 6 + 12 + 18 + 24 = 61, the hexagonal ring sum. Pinned as a NUMBER
-    // because DEC-R2-30 was taken on a stated cost, and a change to the radius
-    // that did not change this count would mean the constant is not being read.
-    expect(scoreWorkingSet(CHUNK, SCORE_DISK_MAX_RADIUS)).toHaveLength(61);
+  it("reaches 127 chunks at the maximum radius", () => {
+    // 1 + 6 + 12 + 18 + 24 + 30 + 36 = 127, the hexagonal ring sum. Pinned as a
+    // NUMBER because the radius decisions were taken on a stated cost, and a
+    // change to the radius that did not change this count would mean the
+    // constant is not being read. Was 61 at radius 4; DEC-K1 raised it to 6.
+    expect(scoreWorkingSet(CHUNK, SCORE_DISK_MAX_RADIUS)).toHaveLength(127);
   });
 });
 
@@ -317,7 +321,7 @@ describe("EVENT_TILE_RES — the geo-event tile", () => {
   });
 
   it("contains the scored disk it has to cover", () => {
-    // A res-8 hexagon has a ~460 m inradius and the scored disk reaches ~250 m
+    // A res-8 hexagon has a ~460 m inradius and the scored disk reaches ~326 m
     // from the user, so a climb starting anywhere in the tile stays inside the
     // ground the ensure step can cover. If this ever inverted, candidates near
     // a tile edge would need data from two fetch tiles to be judged at all.
@@ -336,5 +340,42 @@ describe("EVENT_TILE_RES — the geo-event tile", () => {
     // string-truncating an H3 id yields an invalid cell rather than a parent.
     const tile = latLngToCell(50.9413, 6.9583, FETCH_RES);
     expect(() => toEventTile(tile)).toThrow(/only coarsens/);
+  });
+});
+
+describe("the quest-spot separation (owner report 2026-09-04)", () => {
+  // Why this matters: two res-8 tiles can climb onto one heat plateau from
+  // two sides and settle on adjacent res-13 cells — the same place to a
+  // player, reported twice. The demo merges picks the predicate calls one
+  // spot; the predicate is `gridDisk` membership rather than `gridDistance`,
+  // which throws across pentagons and at range (h3-js README).
+  const cologne = latLngToCell(50.9413, 6.9583, AFFORDANCE_RES);
+
+  it("is four res-13 steps — under 30 m, well inside a ~1 km tile", () => {
+    expect(MIN_PICK_SEPARATION_STEPS).toBe(4);
+    const step =
+      getHexagonEdgeLengthAvg(AFFORDANCE_RES, UNITS.m) * Math.sqrt(3);
+    expect(MIN_PICK_SEPARATION_STEPS * step).toBeLessThan(30);
+  });
+
+  it("calls a cell and any cell within the separation one spot, and one step further not", () => {
+    expect(isSameQuestSpot(cologne, cologne)).toBe(true);
+    const ring = (k: number) =>
+      gridDisk(cologne, k).filter((c) => !gridDisk(cologne, k - 1).includes(c));
+    for (const cell of ring(MIN_PICK_SEPARATION_STEPS)) {
+      expect(isSameQuestSpot(cologne, cell)).toBe(true);
+      expect(isSameQuestSpot(cell, cologne)).toBe(true);
+    }
+    for (const cell of ring(MIN_PICK_SEPARATION_STEPS + 1)) {
+      expect(isSameQuestSpot(cologne, cell)).toBe(false);
+    }
+  });
+
+  it("never throws, whatever the pair", () => {
+    // `gridDistance` would throw for these; the predicate must not.
+    expect(
+      isSameQuestSpot(cologne, latLngToCell(40.7677, -73.9807, AFFORDANCE_RES)),
+    ).toBe(false);
+    expect(isSameQuestSpot(cologne, "not a cell")).toBe(false);
   });
 });

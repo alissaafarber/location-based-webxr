@@ -9,7 +9,9 @@ the derived fetch-coverage function the movement trigger uses.
 ## Public API
 
 - `FETCH_RES = 7` — unit of network fetching and raw-data caching. 2.81 km
-  across, 5.16 km², ~28 MB of decompressed JSON per tile.
+  across, 5.16 km², **~21 MB** of decompressed JSON per tile, fetched in
+  **~15–90 s that does not replicate**. See the constant's own JSDoc for the
+  three figures this line has carried and retracted.
 - `SCORE_CHUNK_RES = 11` — unit of scoring, score caching and eviction.
 - `AFFORDANCE_RES = 13` — the affordance cell itself.
 - `SCORE_DISK_RADIUS = 2` — score working-set radius (19 chunks, ~128 m reach).
@@ -28,6 +30,17 @@ the derived fetch-coverage function the movement trigger uses.
   first, user-visible ring wait on a tile only the outer rings need.
 - `fetchWorkingSet(fetchTile)` → 7 res-7 cells. Fixed-radius; for the explicit
   "download this area" prefetch API only.
+- `MIN_PICK_SEPARATION_STEPS = 4` — how close, in res-13 steps, two quest picks
+  must be to count as ONE spot (~28 m: 4 × 7.09 m centre-to-centre, a
+  `gridDisk` reaching 27.65 m). Owner report 2026-09-04: two adjacent event
+  tiles climbed onto one plateau from two sides and reported it twice, a few
+  metres apart. To a player that is one place; a genuine second quest in a
+  ~1 km tile is far outside it.
+- `isSameQuestSpot(a, b)` → `boolean`. `b` lies within
+  `MIN_PICK_SEPARATION_STEPS` of `a` (`a === b` included). `gridDisk`
+  membership rather than `gridDistance`, which throws across pentagons and at
+  range; an invalid cell reads as "not the same spot". The demo passes this to
+  `newGeoEventFor` as its `sameSpot`.
 - `cellPaddingDegrees(resolution, worstLatitudeDeg)` → `{ lat, lng }` (converts via `metresToDegrees` in `clip.ts`, so the arithmetic has one home). How far,
   in degrees, a cell at `resolution` can reach beyond its own centre — the
   amount by which a bbox built from cell CENTRES must grow to contain the cells
@@ -52,7 +65,7 @@ the derived fetch-coverage function the movement trigger uses.
     3 and 4 were therefore scored against tiles nobody had fetched, and an
     unfetched cell scores as the identity: indistinguishable on screen from "no
     rule has ever mentioned this ground", within ~250 m of any res-7 boundary.
-  - A fixed `gridDisk(tile, 1)` ring cannot state that. It over-fetches ~140 MB
+  - A fixed `gridDisk(tile, 1)` ring cannot state that. It over-fetches ~150 MB (7 tiles x ~21 MB)
     in the tile interior while remaining only heuristically sufficient at a
     boundary — and at `FETCH_RES = 7` a boundary position is ~20 % of the tile's
     area (inradius 1218 m, working-set reach ~128 m).
@@ -80,8 +93,9 @@ what a 7-tile ring of res-8 cells covered, so the movement trigger issues **one*
 request per move instead of seven, and moves are ~7× rarer.
 
 The change is safe because the same day's re-measurement showed a res-7 tile
-fetches in 18.2 s — the earlier belief that large queries were infeasible traced
-to a pathological key **regex**, not to area. See
+fetches at all — the earlier belief that large queries were infeasible traced
+to a pathological key **regex**, not to area. (That run's "18.2 s" is retracted
+with the payload beside it; today's range is ~15–90 s.) See
 `GpsPlusSlamJs_Docs/docs/2026-07-28-1040-overpass-remeasurement-findings.md`.
 
 **Any change to `FETCH_RES` must bump `OVERPASS_SCHEMA_VERSION`**, since a
@@ -114,7 +128,9 @@ const tiles = fetchTilesForScoreWorkingSet(chunk); // 1-3 res-7 tiles to fetch
   resolution change; pins the border-band arithmetic (~20 % at res 7 vs ~48 % at
   res 8); asserts working-set sizes; covers the "already coarser" throw; and
   covers `fetchTilesForScoreWorkingSet` for the interior, coverage and
-  straddling cases.
+  straddling cases; pins the quest-spot separation under 30 m and
+  `isSameQuestSpot` on every cell of ring 4 (same) and ring 5 (not), and
+  that it never throws.
 - `resolutions.property.test.ts` — over random world coordinates: coarsening is
   idempotent and lands at the target resolution, the ladder round-trips, the
   **non-nesting** property is documented with its one-grid-step bound, and the

@@ -25,14 +25,18 @@ import {
   cellToLatLng,
   cellToParent,
   gridDisk,
+  gridDistance,
   latLngToCell,
 } from "h3-js";
 
 import { AffordanceIndex } from "./affordance-index.js";
+import { loadSite } from "../test-utils/load-fixtures.js";
+import { parseOverpassJson } from "../model/overpass-parser.js";
 import { isBelowSurface } from "../model/below-surface.js";
 import type { OsmFeature } from "../model/osm-feature.js";
 import { parseRuleTable } from "../rules/rule-table.js";
 import type { OsmTileResult } from "../source/osm-data-source.js";
+import { mergeTiles } from "../spatial/merge-tiles.js";
 import { OVERPASS_SCHEMA_VERSION } from "../source/overpass-query.js";
 import {
   AFFORDANCE_RES,
@@ -351,8 +355,10 @@ describe("a tile arriving late", () => {
 
     // The two-stage funnel: a cheap raw-position bbox test runs for every
     // feature, and only survivors are ring-stitched and classified. At res 7 a
-    // fetch tile holds ~21,800 features and a chunk needs a handful, so
-    // converting all of them would be the cost this class exists to avoid.
+    // fetch tile is estimated at ~40,000–116,000 features (the ~21,800 once
+    // quoted here is retracted — see `resolutions.ts` FETCH_RES) and a chunk
+    // needs a handful, so converting all of them would be the cost this class
+    // exists to avoid.
     const far = { lat: 51.4, lng: 7.6 };
     index.acceptTile(tile(far, [patch(9, far, { landuse: "grass" })], 3_000));
 
@@ -426,6 +432,65 @@ describe("eviction", () => {
     for (const chunk of result.workingSet) {
       expect(index.chunk(chunk)).toBeDefined();
     }
+  });
+
+  it("drops the FURTHEST chunk, even when a nearer one was held longer", () => {
+    // WHY THIS TEST MATTERS. `evictBeyond`'s docstring promises "furthest-first
+    // rather than least-recently-used: the access pattern is spatial, not
+    // temporal". Nothing asserted the ordering — the test above only checks that
+    // the working set survives, which is true under ANY eviction order.
+    //
+    // The distance function used to saturate: it looped `ring <= SCORE_DISK_RADIUS
+    // + 1` and returned a constant beyond, so every chunk past ring 3 compared
+    // EQUAL. Ties are stable and the candidate array is Map insertion order, so
+    // eviction silently became oldest-first past ~198 m — dropping ground the user
+    // just walked away from in preference to ground far behind them. Reported from
+    // London: heat-map cells cleared right after a short jump.
+    //
+    // The two chunks below are deliberately BOTH outside the working set, and
+    // the nearer one is inserted FIRST, so the old behaviour evicts exactly the
+    // wrong one and the new behaviour evicts exactly the right one.
+    //
+    // ⚠️ THE RINGS ARE DERIVED FROM THE RADIUS, and used to be the literals 5
+    // and 12. Ring 5 sat outside the disc while `SCORE_DISK_MAX_RADIUS` was 4;
+    // DEC-K1 raised it to 6, which pulled ring 5 INSIDE the working set. The
+    // "near" chunk was then never a candidate for eviction at all and the test
+    // failed — correctly, but for a reason that has nothing to do with the
+    // ordering it exists to pin. A literal that silently changes meaning when a
+    // constant moves is the failure this whole file keeps finding.
+    const home = latLngToCell(HOME.lat, HOME.lng, SCORE_CHUNK_RES);
+    const ringAt = (steps: number) =>
+      gridDisk(home, steps).find(
+        (cell) => gridDistance(home, cell) === steps,
+      ) as string;
+    const near = ringAt(SCORE_DISK_MAX_RADIUS + 1);
+    const far = ringAt(SCORE_DISK_MAX_RADIUS + 8);
+
+    // How many chunks a settled working set holds, measured rather than assumed —
+    // deriving it from SCORE_DISK_MAX_RADIUS would restate the constant the
+    // production code already derives and drift with it.
+    const probe = newIndex();
+    probe.update(HOME, SCORE_DISK_MAX_RADIUS);
+    const workingSetSize = probe.scoredChunks().length;
+
+    // Room for the working set and exactly ONE of the two outliers.
+    const index = new AffordanceIndex({
+      table: TABLE,
+      maxChunks: workingSetSize + 1,
+    });
+    index.acceptTile(tile(HOME, [patch(1, HOME, { landuse: "grass" })]));
+
+    // Insertion order is near-then-far: the order that makes oldest-first and
+    // furthest-first disagree.
+    index.ensureScored(cellToChildren(near, AFFORDANCE_RES).slice(0, 1));
+    index.ensureScored(cellToChildren(far, AFFORDANCE_RES).slice(0, 1));
+    expect(index.chunk(near)).toBeDefined();
+    expect(index.chunk(far)).toBeDefined();
+
+    index.update(HOME, SCORE_DISK_MAX_RADIUS);
+
+    expect(index.chunk(far)).toBeUndefined();
+    expect(index.chunk(near)).toBeDefined();
   });
 });
 
@@ -545,6 +610,195 @@ describe("a chunk's score does not depend on what was scored alongside it", () =
       fed.map(() => [homeTile]),
     );
     expect(empty.map((scored) => scored.tiles)).toEqual(empty.map(() => []));
+  });
+});
+
+describe("AffordanceIndex - incremental accept equals a full merge", () => {
+  /**
+   * Why these tests matter (2026-08-30 perf loop, OSM iteration 13):
+   * `acceptTile` used to re-run `mergeTiles` over EVERY held tile on every
+   * call, so a walk paid for tiles it had already merged and the cost grew
+   * with the working set (24th accept 66.2 ms, a 24-tile session 821 ms).
+   * A tile never held before can only ADD or OUTRANK, never remove, so it is
+   * now overlaid onto the current merge instead.
+   *
+   * That is only sound while the overlay picks the SAME winner the full
+   * merge would. These pin exactly that, because nothing else does: the
+   * suite above asserts what a merge produces, not that two ways of reaching
+   * it agree.
+   */
+  const A = { lat: 51.5007, lng: -0.1246 };
+  /** Far enough to land in a DIFFERENT fetch cell than A. */
+  const B = { lat: 51.5007 + 0.06, lng: -0.1246 };
+
+  /**
+   * The same feature key from two DIFFERENT tiles.
+   *
+   * This is the shape that decides the overlay: tiles overlap, so one key can
+   * come from several of them, and the winner is whichever tile sorts last by
+   * (fetchedAt, tile id). Giving each tile its own ids instead - which the
+   * first draft of these tests did - makes every assertion here pass with the
+   * ordering check DELETED, which is no test at all.
+   */
+  const contested = (
+    at: { lat: number; lng: number },
+    fetchedAt: number,
+    surface: string,
+  ) => tile(at, [patch(7, at, { surface })], fetchedAt);
+
+  const surfaceOf = (index: AffordanceIndex) =>
+    [...index.mergedFeatures().values()].find((f) => f.id === 7)?.tags[
+      "surface"
+    ];
+
+  it("lets a newer tile outrank an older one holding the same key", () => {
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(contested(A, 1_000, "old"));
+    index.acceptTile(contested(B, 2_000, "new"));
+    expect(surfaceOf(index)).toBe("new");
+  });
+
+  it("does NOT let an older tile overwrite a newer one that arrived first", () => {
+    // ARRIVAL order is not MERGE order. A late-arriving older tile must lose,
+    // which is the one thing an overlay can get wrong and a full re-merge
+    // could not.
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(contested(B, 2_000, "new"));
+    index.acceptTile(contested(A, 1_000, "old"));
+    expect(surfaceOf(index)).toBe("new");
+  });
+
+  it("breaks a fetchedAt tie by tile id, in either arrival order", () => {
+    // `compareTiles` tie-breaks on the tile id so the order is TOTAL; the
+    // overlay has to reproduce that half too.
+    const cellA = latLngToCell(A.lat, A.lng, FETCH_RES);
+    const cellB = latLngToCell(B.lat, B.lng, FETCH_RES);
+    const higher = cellA > cellB ? A : B;
+    const lower = cellA > cellB ? B : A;
+
+    const forwards = new AffordanceIndex({ table: TABLE });
+    forwards.acceptTile(contested(lower, 1_000, "lower"));
+    forwards.acceptTile(contested(higher, 1_000, "higher"));
+    expect(surfaceOf(forwards)).toBe("higher");
+
+    const backwards = new AffordanceIndex({ table: TABLE });
+    backwards.acceptTile(contested(higher, 1_000, "higher"));
+    backwards.acceptTile(contested(lower, 1_000, "lower"));
+    expect(surfaceOf(backwards)).toBe("higher");
+  });
+
+  it("keeps the LAST copy when one tile repeats a key, as mergeTiles does", () => {
+    // Why this test matters (PR #387 review): the overlay compares the
+    // incoming tile against the provenance entry for each key - and after the
+    // first copy of a repeated key, that entry names THIS tile. The
+    // comparison then ties on fetchedAt and on tile id, so `outranks` is
+    // false and the second copy was SKIPPED, keeping the first.
+    //
+    // mergeTiles does the opposite: its inner loop sets unconditionally, so
+    // within one tile the LAST copy wins. Overpass union/recursion queries can
+    // return the same element twice and parseOverpassJson does not dedupe by
+    // featureKey, so this is reachable - and it made the same tile produce two
+    // different worlds depending on arrival history, since a later refetch
+    // takes the full-merge path and flips to the last copy.
+    //
+    // The earlier equivalence tests could not catch it: every contested key
+    // there came from DIFFERENT tiles.
+    const first = patch(31, A, { surface: "first" });
+    const last = patch(31, A, { surface: "last" });
+    const repeated = tile(A, [first, last], 1_000);
+
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(repeated);
+
+    const expected = mergeTiles([repeated]).features;
+    for (const [key, feature] of expected) {
+      expect(index.mergedFeatures().get(key)).toBe(feature);
+    }
+    expect(
+      [...index.mergedFeatures().values()].find((f) => f.id === 31)?.tags[
+        "surface"
+      ],
+    ).toBe("last");
+  });
+
+  it("agrees with mergeTiles on a contested key, whatever the arrival order", () => {
+    const tiles = [contested(A, 1_000, "a"), contested(B, 3_000, "b")];
+    const expected = mergeTiles(tiles).features;
+
+    for (const order of [tiles, [...tiles].reverse()]) {
+      const index = new AffordanceIndex({ table: TABLE });
+      for (const t of order) index.acceptTile(t);
+      for (const [key, feature] of expected) {
+        expect(index.mergedFeatures().get(key)).toBe(feature);
+      }
+    }
+  });
+  it("agrees with mergeTiles over many DISTINCT tiles in either arrival order", () => {
+    // The property that matters: whatever order distinct tiles arrive in, the
+    // merged set must equal what a full merge of the same tiles produces.
+    const tiles = Array.from({ length: 6 }, (_, i) =>
+      tile(
+        { lat: A.lat + i * 0.02, lng: A.lng },
+        [
+          patch(
+            100 + i,
+            { lat: A.lat + i * 0.02, lng: A.lng },
+            { surface: `s${String(i)}` },
+          ),
+        ],
+        1_000 + ((i * 7) % 5) * 100,
+      ),
+    );
+
+    const forwards = new AffordanceIndex({ table: TABLE });
+    for (const t of tiles) forwards.acceptTile(t);
+    const backwards = new AffordanceIndex({ table: TABLE });
+    for (const t of [...tiles].reverse()) backwards.acceptTile(t);
+
+    const expected = mergeTiles(tiles).features;
+    expect([...forwards.mergedFeatures().keys()].sort()).toEqual(
+      [...expected.keys()].sort(),
+    );
+    expect([...backwards.mergedFeatures().keys()].sort()).toEqual(
+      [...expected.keys()].sort(),
+    );
+    for (const [key, feature] of expected) {
+      expect(forwards.mergedFeatures().get(key)).toBe(feature);
+      expect(backwards.mergedFeatures().get(key)).toBe(feature);
+    }
+  });
+
+  it("still REMOVES features when a refetch drops them", () => {
+    // The one case the overlay must not handle: absence within the bbox of a
+    // single tile means deletion, so a refetch falls back to the full merge.
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(
+      tile(
+        A,
+        [patch(11, A, { surface: "a" }), patch(12, A, { surface: "b" })],
+        1_000,
+      ),
+    );
+    index.acceptTile(tile(A, [patch(11, A, { surface: "a" })], 2_000));
+
+    const ids = [...index.mergedFeatures().values()].map((f) => f.id).sort();
+    expect(ids).toEqual([11]);
+  });
+
+  it("replaces the merged-features map rather than mutating it", () => {
+    // `mergedFeatures()` documents its result as a snapshot whose identity
+    // changes, so a holder keeps a coherent world instead of a torn one. The
+    // overlay copies for exactly that reason; this pins it.
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(tile(A, [patch(21, A, { surface: "a" })], 1_000));
+    const held = index.mergedFeatures();
+    const heldSize = held.size;
+
+    const B = { lat: A.lat + 0.02, lng: A.lng };
+    index.acceptTile(tile(B, [patch(22, B, { surface: "b" })], 2_000));
+
+    expect(index.mergedFeatures()).not.toBe(held);
+    expect(held.size).toBe(heldSize);
   });
 });
 
@@ -1332,4 +1586,138 @@ describe("belowSurfaceFeatures — what the scorer excluded", () => {
       );
     });
   });
+});
+
+describe("mergedFeatures — the read accessor the spatial index reads", () => {
+  it("exposes the merged features rather than making a second copy", () => {
+    // Why this test matters: decision 12.4 asked for this accessor and it turned
+    // out to exist already — so what was missing was never the method, it was
+    // any test of the two properties a second consumer depends on. Identity,
+    // not just contents, is what proves no copy is made: at 14-55 MB resident a
+    // second merged copy is not affordable on a phone.
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(tile(HOME, [patch(1, HOME, { landuse: "grass" })]));
+
+    expect(index.mergedFeatures().size).toBe(1);
+    expect(index.mergedFeatures()).toBe(index.mergedFeatures());
+  });
+
+  it("reflects a later tile, so the two features cannot disagree about what is loaded", () => {
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(tile(HOME, [patch(1, HOME, { landuse: "grass" })]));
+    index.acceptTile(
+      tile(HOME, [
+        patch(1, HOME, { landuse: "grass" }),
+        patch(2, HOME, { leisure: "park" }),
+      ]),
+    );
+
+    expect(index.mergedFeatures().size).toBe(2);
+  });
+
+  it("is a SNAPSHOT: a held reference goes stale after acceptTile", () => {
+    // Why this test matters: `acceptTile` replaces the map rather than mutating
+    // it, so a caller that caches the reference keeps serving the old world
+    // silently — no error, just outdated answers. The hazard is documented on
+    // the accessor, and pinned here so a future change to live-view semantics
+    // has to come past a failing test rather than through prose nobody re-reads.
+    const index = new AffordanceIndex({ table: TABLE });
+    index.acceptTile(tile(HOME, [patch(1, HOME, { landuse: "grass" })]));
+    const held = index.mergedFeatures();
+
+    index.acceptTile(
+      tile(HOME, [
+        patch(1, HOME, { landuse: "grass" }),
+        patch(2, HOME, { leisure: "park" }),
+      ]),
+    );
+
+    expect(held.size).toBe(1);
+    expect(index.mergedFeatures().size).toBe(2);
+    expect(index.mergedFeatures()).not.toBe(held);
+  });
+});
+
+/**
+ * OFF BY DEFAULT, and the number it produced is in the test below.
+ *
+ * 364 ms run alone, but scoring 343 chunks over real corpus features exceeds the
+ * 5 s per-test cap under gate contention -- the same 15-20x inflation
+ * `cell-overlap.differential.test.ts` measured and refused to pay. Set to true to
+ * reproduce.
+ */
+const TIME_EXHAUSTIVE_SCAN = false;
+
+describe("what an exhaustive scan of one event tile costs", () => {
+  it.skipIf(!TIME_EXHAUSTIVE_SCAN)(
+    "times scoring all 343 res-11 chunks of a res-8 tile",
+    () => {
+      // WHY THIS TEST MATTERS. Two geo-event fixes have now been refuted on the
+      // same invariant: **anything that searches more of the event tile must score
+      // more of it.** Heat-weighted seeding needs a field that does not exist, and
+      // a res-11 climb far enough to matter needs 684 chunks against a 488 cap.
+      //
+      // What survives is not climbing at all: a res-8 tile holds exactly 7^3 = 343
+      // res-11 chunks, which is FEWER than the climb variants need, and once they
+      // are scored the true maximum can simply be read off. Cache pressure is
+      // settled — 343 plus a 61-chunk working set is 404, under the 488 cap, so it
+      // evicts nothing. **Wall-clock was the one number missing**, and a geo-event
+      // is a button press.
+      // REAL CORPUS DATA, not a synthetic patch. Scoring cost is driven by how
+      // many features each chunk must consider, so a fixture with one grass square
+      // measures the loop and not the work: it reported 13 ms, which is a floor.
+      const site = loadSite("london-westminster");
+      const features = [...parseOverpassJson(site.payload).features];
+      const index = new AffordanceIndex({ table: TABLE });
+      index.acceptTile({
+        tile: latLngToCell(site.centre.lat, site.centre.lng, FETCH_RES),
+        features,
+        fetchedAt: 1_000,
+        sourceId: "test",
+        schemaVersion: OVERPASS_SCHEMA_VERSION,
+        skipped: [],
+      });
+
+      const eventTile = cellToParent(
+        latLngToCell(site.centre.lat, site.centre.lng, SCORE_CHUNK_RES),
+        8,
+      );
+      const chunks = cellToChildren(eventTile, SCORE_CHUNK_RES);
+      expect(chunks.length).toBe(343);
+
+      // One res-13 cell per chunk is enough: `ensureScored` maps each to its
+      // res-11 parent and scores the whole chunk.
+      const seeds = chunks.map(
+        (chunk) => cellToChildren(chunk, AFFORDANCE_RES)[0] as string,
+      );
+
+      const started = performance.now();
+      index.ensureScored(seeds);
+      const ms = performance.now() - started;
+
+      process.stdout.write(
+        `[exhaustive tile scan] chunks=${chunks.length} ` +
+          `scored=${index.scoredChunks().length} in ${ms.toFixed(0)} ms\n`,
+      );
+
+      // MEASURED 364 ms over london-westminster's 2 259 features, against 13 ms
+      // for a one-feature synthetic patch -- which is why the synthetic version was
+      // replaced rather than kept.
+      //
+      // **IT IS STILL A LOWER BOUND, and the reason is the same one that blocks
+      // every other full-scale number in this package: no fixture holds a full
+      // tile.** An Overpass bbox extract covers roughly 2 % of the res-8 event
+      // tile its features land in, so most of these 343 chunks are empty and
+      // nearly free to score. A genuinely full tile would cost more, and by how
+      // much is NOT established here.
+      //
+      // So what this settles is narrow and worth stating exactly: an exhaustive
+      // scan is **not obviously unaffordable**, which is what the alternative
+      // designs needed to know. It does not establish that it IS affordable.
+      //
+      // Reports rather than pins: this decides a design nobody has committed to,
+      // and a threshold chosen now would be a threshold fitted to one machine.
+      expect(index.scoredChunks().length).toBeGreaterThan(300);
+    },
+  );
 });

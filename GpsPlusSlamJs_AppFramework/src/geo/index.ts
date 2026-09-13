@@ -20,3 +20,9 @@ export {
   type NueDirection,
   type SunPositionResult,
 } from './sun-position.js';
+
+export {
+  sunAltitudeToLighting,
+  type SunLightingResult,
+  type LightColor,
+} from './sun-altitude-lighting.js';

@@ -11,6 +11,8 @@ packages:
   - GpsPlusSlamJs_OsmDemo
 
   - GpsPlusSlamJs_SunPositionDemo
+  - GpsPlusSlamJs_SunShadowRigDemo
+  - GpsPlusSlamJs_SunAltitudeLightingDemo
   - GpsPlusSlamJs_VisibleSunDiscDemo
   - GpsPlusSlamJs_TourViewer
   - GpsPlusSlamJs_SiteWorker

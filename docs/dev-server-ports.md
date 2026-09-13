@@ -12,9 +12,16 @@
 - **5184** — `GpsPlusSlamJs_PhysicsDemo`
 - **5185** — `GpsPlusSlamJs_QrTrackingDemo`
 - **5186** — `GpsPlusSlamJs_OsmDemo`
+- **5184** — `GpsPlusSlamJs_PhysicsDemo`
+- **5185** — `GpsPlusSlamJs_QrTrackingDemo`
+- **5186** — `GpsPlusSlamJs_OsmDemo`
 - **5187** — `GpsPlusSlamJs_TourViewer`
-
 - **5188** — `GpsPlusSlamJs_SunPositionDemo`
+- **5189** — `GpsPlusSlamJs_VisibleSunDiscDemo`
+- **5190** — `GpsPlusSlamJs_SunShadowRigDemo`
+- **5191** — `GpsPlusSlamJs_SunAltitudeLightingDemo`
+
+Next free: **5192**.
 
 - **5189** — `GpsPlusSlamJs_VisibleSunDiscDemo`
 

@@ -115,6 +115,7 @@ const entryFiles = [
   'src/geo/index.ts',
   'src/geo/h3-proximity.ts',
   'src/geo/sun-position.ts',
+  'src/geo/real-sun-data-adapter.ts',
 
   // sensors/
   'src/sensors/index.ts',

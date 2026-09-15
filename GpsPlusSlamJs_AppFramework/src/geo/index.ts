@@ -26,3 +26,14 @@ export {
   type SunLightingResult,
   type LightColor,
 } from './sun-altitude-lighting.js';
+
+export {
+  createRealSunDataAdapter,
+  type RealSunDataAdapter,
+  type RealSunDataAdapterOptions,
+  type RealSunDataState,
+  type RealSunSample,
+  type SunInputSelection,
+  type SunLocationSource,
+  type SunTimeSource,
+} from './real-sun-data-adapter.js';

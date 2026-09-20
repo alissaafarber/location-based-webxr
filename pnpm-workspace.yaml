@@ -15,6 +15,7 @@ packages:
   - GpsPlusSlamJs_SunAltitudeLightingDemo
   - GpsPlusSlamJs_VisibleSunDiscDemo
   - GpsPlusSlamJs_RealSunDataAdapterDemo
+  - GpsPlusSlamJs_RealisticSunLightingDemo
   - GpsPlusSlamJs_TourViewer
   - GpsPlusSlamJs_SiteWorker
   - GpsPlusSlamJs_DesignSystem

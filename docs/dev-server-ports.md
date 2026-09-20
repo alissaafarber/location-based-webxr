@@ -21,8 +21,9 @@
 - **5190** — `GpsPlusSlamJs_SunShadowRigDemo`
 - **5191** — `GpsPlusSlamJs_SunAltitudeLightingDemo`
 - **5192** — `GpsPlusSlamJs_RealSunDataAdapterDemo`
+- **5193** — `GpsPlusSlamJs_RealisticSunLightingDemo`
 
-Next free: **5193**.
+Next free: **5194**.
 
 ### Auxiliary e2e servers (not vite, invisible to `dev-server-ports.test.js`)
 

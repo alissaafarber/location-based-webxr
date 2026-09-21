@@ -11,6 +11,7 @@ Module executes `main()` on load (no exported symbols).
 ## Invariants
 
 - Placed 3D content and the hit-test reticle are attached under `getArWorldGroup()` (AR-local space).
+- Objects are added to `arWorldGroup` before GPS anchoring (required for `createGpsAnchor` to work correctly).
 - The directional sun shadow light is anchored under `getScene()` in GPS-world NUE coordinates.
 - Renderer shadow maps are enabled (`PCFSoftShadowMap`).
 - HUD pointer events stop propagation to avoid misinterpreting control clicks as placement taps.

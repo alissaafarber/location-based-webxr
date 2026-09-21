@@ -226,6 +226,11 @@ function main(): void {
     sundial.mesh.position.copy(worldPosition);
     placedMesh = sundial.mesh;
 
+    // Add to arWorldGroup first (required for GPS anchoring to work)
+    arWorldGroup.add(sundial.mesh);
+    arWorldGroup.updateWorldMatrix(true, false);
+    sundial.mesh.position.copy(arWorldGroup.worldToLocal(worldPosition.clone()));
+
     if (lastGps) {
       placedAnchor = createGpsAnchor({
         object3D: sundial.mesh,
@@ -235,8 +240,6 @@ function main(): void {
         getAlignmentMatrix: () => selectAlignmentMatrix(store.getState()),
         getGpsZeroRef: (): LatLong | null => selectZeroReference(store.getState()),
       });
-    } else {
-      arWorldGroup.add(sundial.mesh);
     }
 
     // Register content bounds in world space for shadow rig framing

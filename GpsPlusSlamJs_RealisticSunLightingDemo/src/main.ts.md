@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Main entrypoint for `GpsPlusSlamJs_RealisticSunLightingDemo`. Bootstraps WebXR AR lifecycle via `createEnableGpsArController`, runs surface hit-testing with `startHitTestReticle`, places drift-compensated digital sundials with `createGpsAnchor`, and coordinates the solar lighting and shadow pipeline.
+Main entrypoint for `GpsPlusSlamJs_RealisticSunLightingDemo`. Bootstraps WebXR AR lifecycle via `createEnableGpsArController`, runs surface hit-testing with `startHitTestReticle`, places drift-compensated digital sundials with `createGpsAnchor`, and coordinates the solar lighting and shadow pipeline. Uses GPS-gated tap-to-place logic via `decideTapPlacement` to ensure GPS anchoring works correctly.
 
 ## Public API
 
@@ -14,6 +14,8 @@ Module executes `main()` on load (no exported symbols).
 - The directional sun shadow light is anchored under `getScene()` in GPS-world NUE coordinates.
 - Renderer shadow maps are enabled (`PCFSoftShadowMap`).
 - HUD pointer events stop propagation to avoid misinterpreting control clicks as placement taps.
+- Tap-to-place requires GPS fix via `decideTapPlacement()` gate (shows "waiting for GPS…" hint when unavailable).
+- Transient hints auto-expire after 2 seconds and reset to default placement message.
 
 ## Examples
 

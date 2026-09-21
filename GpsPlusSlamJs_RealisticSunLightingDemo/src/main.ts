@@ -41,6 +41,7 @@ import type { ContentBounds } from 'gps-plus-slam-app-framework/visualization/su
 import type { LatLong, LatLongAlt } from 'gps-plus-slam-app-framework/core';
 
 import { createSundialModel } from './object-spawner.js';
+import { decideTapPlacement } from './placement.js';
 import {
   createSunOrchestrator,
   type SunOrchestrator,
@@ -105,6 +106,25 @@ function main(): void {
   // Prevent taps inside the HUD panel from propagating to the WebXR hit test
   for (const eventName of ['pointerdown', 'touchstart', 'click'] as const) {
     statusPanel.addEventListener(eventName, (e) => e.stopPropagation());
+  }
+
+  // Transient hint display (briefly shows messages like "waiting for GPS…")
+  let hintTimeout: number | null = null;
+  function showHint(message: string, durationMs = 2000): void {
+    tapHint.textContent = message;
+    tapHint.classList.remove('hidden');
+    if (hintTimeout !== null) {
+      clearTimeout(hintTimeout);
+    }
+    hintTimeout = window.setTimeout(() => {
+      tapHint.classList.add('hidden');
+      // Reset to default message after hint expires
+      if (reticleHandle && placedMesh === null) {
+        tapHint.textContent = 'Point at ground & tap to place sundial';
+        tapHint.classList.remove('hidden');
+      }
+      hintTimeout = null;
+    }, durationMs);
   }
 
   // 1. Initialize State Store
@@ -275,9 +295,18 @@ function main(): void {
         reticleHandle = startHitTestReticle({
           arWorldGroup,
           onSelect: (worldPosition) => {
-            if (worldPosition) {
-              placeSundial(worldPosition);
+            const decision = decideTapPlacement({
+              hasGpsFix: gpsFixCount > 0,
+              reticleVisible: worldPosition !== null,
+            });
+            if (decision.kind === 'waiting-for-gps') {
+              showHint('waiting for GPS…');
+              return;
             }
+            if (decision.kind === 'no-surface' || worldPosition === null) {
+              return;
+            }
+            placeSundial(worldPosition);
           },
         });
 
@@ -317,6 +346,10 @@ function main(): void {
           orchestrator = null;
           viewModel = null;
           teardownArSessionState(store);
+          if (hintTimeout !== null) {
+            clearTimeout(hintTimeout);
+            hintTimeout = null;
+          }
           tapHint.classList.add('hidden');
         },
       },

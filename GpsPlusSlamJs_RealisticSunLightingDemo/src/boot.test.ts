@@ -3,17 +3,21 @@ import * as THREE from 'three';
 import { createSlamAppStore } from 'gps-plus-slam-app-framework/state';
 import { NullStorageBackend } from 'gps-plus-slam-app-framework/storage';
 import { createSundialModel } from './object-spawner.js';
+import { decideTapPlacement } from './placement.js';
 import { createSunOrchestrator } from './sun-orchestrator.js';
 import { createStatusPanelViewModel } from './status-panel.js';
 
 describe('boot: headless smoke test', () => {
-  it('boots store, spawner, orchestrator and view-model without throwing', () => {
+  it('boots store, spawner, placement, orchestrator and view-model without throwing', () => {
     const store = createSlamAppStore({ storageBackend: new NullStorageBackend() });
     expect(store.getState()).toBeDefined();
     expect(store.getState().recording).toBeDefined();
 
     const sundial = createSundialModel();
     expect(sundial.mesh).toBeInstanceOf(THREE.Group);
+
+    const decision = decideTapPlacement({ hasGpsFix: true, reticleVisible: true });
+    expect(decision.kind).toBe('place');
 
     const scene = new THREE.Scene();
     const arWorldGroup = new THREE.Group();

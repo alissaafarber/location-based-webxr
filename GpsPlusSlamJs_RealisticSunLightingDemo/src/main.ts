@@ -331,7 +331,7 @@ function main(): void {
       container: arRoot,
       requestHitTest: true,
       isolationOptions: {
-        enableCameraAccess: false,
+        enableCameraAccess: true,
         enableDepthSensingFeature: false,
         enableCameraTextureAcquisition: false,
       },

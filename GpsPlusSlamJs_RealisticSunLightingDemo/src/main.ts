@@ -242,15 +242,15 @@ function main(): void {
       });
     }
 
-    // Register content bounds in world space for shadow rig framing
-    // Get the actual world position of the placed sundial
-    const worldPositionPlaced = new THREE.Vector3();
-    sundial.mesh.getWorldPosition(worldPositionPlaced);
+    // Register content bounds in NUE space for shadow rig framing
+    // Since arWorldGroup local space is NUE, use the local position directly
+    // The shadow rig is attached to scene (GPS-world NUE space) and expects NUE coordinates
+    const localPosition = sundial.mesh.position.clone();
     placedBounds = {
       center: {
-        x: worldPositionPlaced.x + ('center' in sundial.bounds ? sundial.bounds.center.x : 0),
-        y: worldPositionPlaced.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
-        z: worldPositionPlaced.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
+        x: localPosition.x + ('center' in sundial.bounds ? sundial.bounds.center.x : 0),
+        y: localPosition.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
+        z: localPosition.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
       },
       radius: 'radius' in sundial.bounds ? sundial.bounds.radius : 1.0,
     };

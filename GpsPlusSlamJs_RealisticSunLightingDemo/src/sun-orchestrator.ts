@@ -42,9 +42,9 @@ export function createSunOrchestrator(
   const shadowRig = createSunShadowRig(deps.scene, {
     mapSize: 2048,
     groundPlaneSize: 100,
-    shadowOpacity: 0.6,
-    bias: -0.0005,
-    normalBias: 0.03,
+    shadowOpacity: 0.7,
+    bias: -0.0001,
+    normalBias: 0.05,
   });
   const sunDisc = createVisibleSunDisc(deps.scene, {
     distance: 15,

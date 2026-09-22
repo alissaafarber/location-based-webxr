@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { createSlamAppStore } from 'gps-plus-slam-app-framework/state';
 import { NullStorageBackend } from 'gps-plus-slam-app-framework/storage';
-import { createSundialModel } from './object-spawner.js';
+import { createSimpleGeometry } from './object-spawner.js';
 import { decideTapPlacement } from './placement.js';
 import { createSunOrchestrator } from './sun-orchestrator.js';
 import { createStatusPanelViewModel } from './status-panel.js';
@@ -13,8 +13,8 @@ describe('boot: headless smoke test', () => {
     expect(store.getState()).toBeDefined();
     expect(store.getState().recording).toBeDefined();
 
-    const sundial = createSundialModel();
-    expect(sundial.mesh).toBeInstanceOf(THREE.Group);
+    const simpleGeometry = createSimpleGeometry();
+    expect(simpleGeometry.mesh).toBeInstanceOf(THREE.Group);
 
     const decision = decideTapPlacement({ hasGpsFix: true, reticleVisible: true });
     expect(decision.kind).toBe('place');

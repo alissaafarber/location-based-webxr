@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { createSundialModel, type SpawnedObject } from './object-spawner.js';
+import { createSimpleGeometry, type SpawnedObject } from './object-spawner.js';
 
 describe('object-spawner', () => {
   it('creates a simple box with castShadow and receiveShadow enabled', () => {
-    const spawned: SpawnedObject = createSundialModel();
+    const spawned: SpawnedObject = createSimpleGeometry();
 
     expect(spawned.mesh).toBeInstanceOf(THREE.Group);
     expect(spawned.mesh.children.length).toBeGreaterThan(0);
@@ -23,7 +23,7 @@ describe('object-spawner', () => {
   });
 
   it('computes valid ContentBounds enclosing the object above ground Y=0', () => {
-    const spawned = createSundialModel();
+    const spawned = createSimpleGeometry();
 
     expect(spawned.bounds).toBeDefined();
     if ('radius' in spawned.bounds) {
@@ -36,8 +36,8 @@ describe('object-spawner', () => {
   });
 
   it('supports custom scale factor', () => {
-    const defaultObj = createSundialModel();
-    const scaledObj = createSundialModel({ scale: 2.0 });
+    const defaultObj = createSimpleGeometry();
+    const scaledObj = createSimpleGeometry({ scale: 2.0 });
 
     if ('radius' in defaultObj.bounds && 'radius' in scaledObj.bounds) {
       expect(scaledObj.bounds.radius).toBeCloseTo(defaultObj.bounds.radius * 2.0, 1);

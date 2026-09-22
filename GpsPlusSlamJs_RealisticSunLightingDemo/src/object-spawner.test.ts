@@ -10,27 +10,16 @@ describe('object-spawner', () => {
     expect(spawned.mesh.children.length).toBeGreaterThan(0);
 
     let meshCount = 0;
-    let hasShadowMaterial = false;
-    let hasStandardMaterial = false;
     spawned.mesh.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         meshCount++;
-        if (child.material instanceof THREE.ShadowMaterial) {
-          hasShadowMaterial = true;
-          expect(child.receiveShadow).toBe(true);
-          // ShadowMaterial doesn't need to cast shadows
-        } else {
-          hasStandardMaterial = true;
-          expect(child.material).toBeInstanceOf(THREE.MeshStandardMaterial);
-          expect(child.castShadow).toBe(true);
-          expect(child.receiveShadow).toBe(true);
-        }
+        expect(child.castShadow).toBe(true);
+        expect(child.receiveShadow).toBe(true);
+        expect(child.material).toBeInstanceOf(THREE.MeshStandardMaterial);
       }
     });
 
-    expect(meshCount).toBe(2); // Box + ground plane
-    expect(hasShadowMaterial).toBe(true);
-    expect(hasStandardMaterial).toBe(true);
+    expect(meshCount).toBe(1); // Simple box has 1 mesh
   });
 
   it('computes valid ContentBounds enclosing the object above ground Y=0', () => {

@@ -42,7 +42,7 @@ export function createSunOrchestrator(
   const shadowRig = createSunShadowRig(deps.scene, {
     mapSize: 2048,
     groundPlaneSize: 100,
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.6,
     bias: -0.0005,
     normalBias: 0.03,
   });
@@ -69,6 +69,7 @@ export function createSunOrchestrator(
       ambientLight.color.setHex(lighting.color);
 
       // 3. Update shadow rig orientation, light intensity, and light color
+      // Note: content bounds are updated per-frame in updateFrame() when objects are placed
       shadowRig.update(latestDirectionNue, undefined, lighting);
     }
   });
@@ -84,11 +85,9 @@ export function createSunOrchestrator(
         // Update billboard position & frustum visibility for sun disc
         sunDisc.update(latestDirectionNue, camera);
 
-        // Update framed shadow frustum if content bounds provided
-        if (contentBounds) {
-          const lighting = sunAltitudeToLighting(latestAltitudeRad);
-          shadowRig.update(latestDirectionNue, contentBounds, lighting);
-        }
+        // Always update shadow rig with current lighting and content bounds
+        const lighting = sunAltitudeToLighting(latestAltitudeRad);
+        shadowRig.update(latestDirectionNue, contentBounds, lighting);
       }
     },
 

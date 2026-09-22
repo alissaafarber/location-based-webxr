@@ -243,11 +243,14 @@ function main(): void {
     }
 
     // Register content bounds in world space for shadow rig framing
+    // Get the actual world position of the placed sundial
+    const worldPositionPlaced = new THREE.Vector3();
+    sundial.mesh.getWorldPosition(worldPositionPlaced);
     placedBounds = {
       center: {
-        x: worldPosition.x + ('center' in sundial.bounds ? sundial.bounds.center.x : 0),
-        y: worldPosition.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
-        z: worldPosition.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
+        x: worldPositionPlaced.x + ('center' in sundial.bounds ? sundial.bounds.center.x : 0),
+        y: worldPositionPlaced.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
+        z: worldPositionPlaced.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
       },
       radius: 'radius' in sundial.bounds ? sundial.bounds.radius : 1.0,
     };

@@ -30,7 +30,8 @@ export function createSunOrchestrator(
 ## Invariants
 
 - Subscribes to solar state changes and propagates updates immediately to the shadow rig and ambient light.
-- `updateFrame` updates the billboarded sun disc and tightens the shadow camera frustum when `contentBounds` are available.
+- `updateFrame` always updates the shadow rig with current lighting and content bounds (even when bounds are undefined, uses default bounds).
+- Shadow rig uses increased opacity (0.6) for better shadow visibility on ground plane.
 - `dispose` unhooks subscriptions, disposes child resources, and removes ambient light from the scene.
 
 ## Examples

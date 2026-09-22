@@ -22,26 +22,36 @@ export function createSimpleGeometry(options: SpawnOptions = {}): SpawnedObject 
   // Simple box material with proper lighting properties
   const boxMaterial = new THREE.MeshStandardMaterial({
     color: 0xff6b6b,
-    roughness: 0.5,
-    metalness: 0.1,
+    roughness: 0.7,
+    metalness: 0.0,
   });
 
-  // Simple box geometry
-  const boxGeometry = new THREE.BoxGeometry(2 * scale, 2 * scale, 2 * scale);
+  // Smaller box geometry (reduced from 2*scale to 0.5*scale)
+  const boxGeometry = new THREE.BoxGeometry(0.5 * scale, 0.5 * scale, 0.5 * scale);
   const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
-  boxMesh.position.set(0, 1 * scale, 0);
+  boxMesh.position.set(0, 0.25 * scale, 0); // Position so bottom touches ground at Y=0
   boxMesh.castShadow = true;
   boxMesh.receiveShadow = true;
   group.add(boxMesh);
 
-  // Content bounds for shadow camera frustum
+  // Add a ground plane to receive shadows
+  const groundGeometry = new THREE.PlaneGeometry(10 * scale, 10 * scale);
+  const groundMaterial = new THREE.ShadowMaterial({ opacity: 0.4 });
+  const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+  groundMesh.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+  groundMesh.position.y = 0; // Ground level
+  groundMesh.receiveShadow = true;
+  groundMesh.castShadow = false; // Ground plane only receives shadows
+  group.add(groundMesh);
+
+  // Content bounds for shadow camera frustum (focused on the box)
   const bounds: ContentBounds = {
     center: {
       x: 0,
-      y: 1 * scale,
+      y: 0.25 * scale,
       z: 0,
     },
-    radius: 1.5 * scale,
+    radius: 1.0 * scale, // Bounds around the box
   };
 
   return {

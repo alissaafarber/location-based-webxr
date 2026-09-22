@@ -42,7 +42,7 @@ export function createSunOrchestrator(
   const shadowRig = createSunShadowRig(deps.scene, {
     mapSize: 2048,
     groundPlaneSize: 100,
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.6,
     bias: -0.0005,
     normalBias: 0.03,
   });
@@ -50,7 +50,7 @@ export function createSunOrchestrator(
     distance: 15,
     diameter: 0.8,
   });
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
   deps.scene.add(ambientLight);
 
   let latestDirectionNue: NueDirection | null = null;
@@ -69,7 +69,12 @@ export function createSunOrchestrator(
       ambientLight.color.setHex(lighting.color);
 
       // 3. Update shadow rig with direction and lighting (content bounds updated per-frame)
-      shadowRig.update(latestDirectionNue, undefined, lighting);
+      // Increase directional light intensity for better visibility
+      const enhancedLighting = {
+        ...lighting,
+        intensity: lighting.intensity * 1.5,
+      };
+      shadowRig.update(latestDirectionNue, undefined, enhancedLighting);
     }
   });
 
@@ -87,7 +92,11 @@ export function createSunOrchestrator(
         // Update shadow rig with content bounds for proper shadow framing
         if (contentBounds) {
           const lighting = sunAltitudeToLighting(latestAltitudeRad);
-          shadowRig.update(latestDirectionNue, contentBounds, lighting);
+          const enhancedLighting = {
+            ...lighting,
+            intensity: lighting.intensity * 1.5,
+          };
+          shadowRig.update(latestDirectionNue, contentBounds, enhancedLighting);
         }
       }
     },

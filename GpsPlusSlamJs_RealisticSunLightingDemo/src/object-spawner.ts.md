@@ -22,7 +22,8 @@ export function createSimpleGeometry(options?: SpawnOptions): SpawnedObject;
 ## Invariants
 
 - Box has `castShadow = true` and `receiveShadow = true` for shadow casting and receiving.
-- Box is positioned at Y=1*scale to sit above ground plane.
+- Box is positioned at Y=0.25*scale (bottom touches ground at Y=0).
+- Ground plane with ShadowMaterial receives shadows at Y=0.
 - Returns a bounding `ContentBounds` (Sphere3D) centered on the box for shadow camera frustum framing.
 
 ## Examples

@@ -4,26 +4,26 @@
 
 ## Latest
 
-Last recorded 2026-09-22T15:38:55.294Z · machine `16a7d94c (Intel(R) Core(TM) i5-14600K, 12 threads)` · branch `feature/sun-lighting` @ `ea0c3381`
+Last recorded 2026-09-22T15:51:08.440Z · machine `16a7d94c (Intel(R) Core(TM) i5-14600K, 12 threads)` · branch `feature/sun-lighting` @ `e5f00dec`
 
 _Header describes the most recent write only; standalone stage runs update single rows. Median = the stage's same-machine history median. Per-recording provenance lives in the JSON block._
 
 | Stage | Duration | Δ duration | Median | Tests | Δ tests | Flag |
 | --- | ---: | ---: | ---: | --- | ---: | --- |
 | `typecheck` | 0.7 s | ≈ | 0.8 s | – | – | |
-| `test:unit` | 1.0 s | ≈ | 1.0 s | 21 passed | 0 | |
+| `test:unit` | 0.9 s | ≈ | 1.0 s | 21 passed | 0 | |
 | **total** | 1.9 s | ≈ | 1.8 s | 21 passed | +4 | |
 
 ## History (last 10 recordings per stage, newest first, seconds)
 
 - `typecheck`: 0.7, 0.9, 0.7, 0.8
-- `test:unit`: 1.0, 1.0, 1.0, 1.0, 0.9
+- `test:unit`: 0.9, 1.0, 1.0, 1.0, 1.0, 0.9
 - `total`: 1.9, 1.7
 
 ```json
 {
   "version": 1,
-  "meta": {"project":"GpsPlusSlamJs_RealisticSunLightingDemo","lastWrite":{"ts":"2026-09-22T15:38:55.294Z","machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","machineLabel":"16a7d94c (Intel(R) Core(TM) i5-14600K, 12 threads)","git":"ea0c3381","branch":"feature/sun-lighting"}},
+  "meta": {"project":"GpsPlusSlamJs_RealisticSunLightingDemo","lastWrite":{"ts":"2026-09-22T15:51:08.440Z","machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","machineLabel":"16a7d94c (Intel(R) Core(TM) i5-14600K, 12 threads)","git":"e5f00dec","branch":"feature/sun-lighting"}},
   "stages": {
     "typecheck": { "history": [
       {"ts":"2026-09-21T17:34:00.913Z","durationMs":711,"tests":null,"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"7fa21819"},
@@ -32,6 +32,7 @@ _Header describes the most recent write only; standalone stage runs update singl
       {"ts":"2026-09-19T19:02:11.136Z","durationMs":836,"tests":null,"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"9b5c0200"}
     ] },
     "test:unit": { "history": [
+      {"ts":"2026-09-22T15:51:08.440Z","durationMs":931,"tests":{"passed":21,"failed":0,"skipped":0,"todo":0},"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"e5f00dec"},
       {"ts":"2026-09-22T15:38:55.294Z","durationMs":952,"tests":{"passed":21,"failed":0,"skipped":0,"todo":0},"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"ea0c3381"},
       {"ts":"2026-09-21T17:34:07.237Z","durationMs":966,"tests":{"passed":21,"failed":0,"skipped":0,"todo":0},"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"7fa21819"},
       {"ts":"2026-09-21T17:33:38.067Z","durationMs":962,"tests":{"passed":21,"failed":0,"skipped":0,"todo":0},"machine":"16a7d94c|Intel-R-Core-TM-i5-14600K|12","git":"7fa21819"},

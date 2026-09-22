@@ -242,18 +242,8 @@ function main(): void {
       });
     }
 
-    // Register content bounds in NUE space for shadow rig framing
-    // Since arWorldGroup local space is NUE, use the local position directly
-    // The shadow rig is attached to scene (GPS-world NUE space) and expects NUE coordinates
-    const localPosition = sundial.mesh.position.clone();
-    placedBounds = {
-      center: {
-        x: localPosition.x + ('center' in sundial.bounds ? sundial.bounds.center.x : 0),
-        y: localPosition.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
-        z: localPosition.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
-      },
-      radius: 'radius' in sundial.bounds ? sundial.bounds.radius * 1.5 : 1.5,
-    };
+    // Use the pre-calculated bounds from the object spawner
+    placedBounds = sundial.bounds;
 
     tapHint.classList.add('hidden');
   }

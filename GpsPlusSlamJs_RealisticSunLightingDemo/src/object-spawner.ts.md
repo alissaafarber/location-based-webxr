@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Creates a 3D digital sundial model with pedestal, dial face, hour markers, and an angled gnomon designed to demonstrate directional solar shadows and contact shadows on real-world AR surfaces.
+Creates a simple box for shadow debugging, matching the working pattern from SunShadowRigDemo. Replaces complex sundial to isolate ground shadow issues.
 
 ## Public API
 
@@ -21,17 +21,17 @@ export function createSundialModel(options?: SpawnOptions): SpawnedObject;
 
 ## Invariants
 
-- All meshes in the returned group have `castShadow = true` and `receiveShadow = true`.
-- The base geometry sits flush with the ground plane at $Y = 0$.
-- Returns a bounding `ContentBounds` (Sphere3D) centered on the model for shadow camera frustum framing.
+- Box has `castShadow = true` and `receiveShadow = true` for shadow casting and receiving.
+- Box is positioned at Y=1*scale to sit above ground plane.
+- Returns a bounding `ContentBounds` (Sphere3D) centered on the box for shadow camera frustum framing.
 
 ## Examples
 
 ```ts
 import { createSundialModel } from './object-spawner.js';
 
-const sundial = createSundialModel({ scale: 1.0 });
-arWorldGroup.add(sundial.mesh);
+const box = createSundialModel({ scale: 1.0 });
+arWorldGroup.add(box.mesh);
 ```
 
 ## Tests

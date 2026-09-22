@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Creates a simple box geometry for shadow debugging. This is a simpler geometry alternative to complex models.
+Creates a simple box geometry for shadow debugging. This is a simpler geometry alternative to complex models. The shadow rig provides a global shadowCatcher ground plane at scene level to receive shadows.
 
 ## Public API
 
@@ -23,7 +23,7 @@ export function createSimpleGeometry(options?: SpawnOptions): SpawnedObject;
 
 - Box has `castShadow = true` and `receiveShadow = true` for shadow casting and receiving.
 - Box is positioned at Y=0.25*scale (bottom touches ground at Y=0).
-- Ground plane with ShadowMaterial receives shadows at Y=0.
+- Shadow reception is handled by the global shadowCatcher ground plane provided by the sun shadow rig at scene level.
 - Returns a bounding `ContentBounds` (Sphere3D) centered on the box for shadow camera frustum framing.
 
 ## Examples

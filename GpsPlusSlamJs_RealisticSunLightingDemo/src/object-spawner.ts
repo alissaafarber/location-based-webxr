@@ -13,6 +13,7 @@ export interface SpawnedObject {
 /**
  * Creates a simple box geometry for shadow debugging.
  * This is a simpler geometry alternative to complex models.
+ * The shadow rig provides a global shadowCatcher ground plane at scene level.
  */
 export function createSimpleGeometry(options: SpawnOptions = {}): SpawnedObject {
   const scale = options.scale ?? 1.0;
@@ -33,16 +34,6 @@ export function createSimpleGeometry(options: SpawnOptions = {}): SpawnedObject 
   boxMesh.castShadow = true;
   boxMesh.receiveShadow = true;
   group.add(boxMesh);
-
-  // Add a ground plane to receive shadows
-  const groundGeometry = new THREE.PlaneGeometry(10 * scale, 10 * scale);
-  const groundMaterial = new THREE.ShadowMaterial({ opacity: 0.4 });
-  const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-  groundMesh.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-  groundMesh.position.y = 0; // Ground level
-  groundMesh.receiveShadow = true;
-  groundMesh.castShadow = false; // Ground plane only receives shadows
-  group.add(groundMesh);
 
   // Content bounds for shadow camera frustum (focused on the box)
   const bounds: ContentBounds = {

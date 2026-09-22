@@ -242,8 +242,34 @@ function main(): void {
       });
     }
 
-    // Use the pre-calculated bounds from the object spawner
-    placedBounds = simpleGeometry.bounds;
+    // Convert local bounds to world bounds for shadow rig (GPS-world space)
+    let worldBounds: ContentBounds;
+    if ('center' in simpleGeometry.bounds && 'radius' in simpleGeometry.bounds) {
+      // Sphere3D bounds
+      worldBounds = {
+        center: {
+          x: worldPosition.x + simpleGeometry.bounds.center.x,
+          y: worldPosition.y + simpleGeometry.bounds.center.y,
+          z: worldPosition.z + simpleGeometry.bounds.center.z,
+        },
+        radius: simpleGeometry.bounds.radius,
+      };
+    } else {
+      // Aabb3D bounds
+      worldBounds = {
+        min: {
+          x: worldPosition.x + simpleGeometry.bounds.min.x,
+          y: worldPosition.y + simpleGeometry.bounds.min.y,
+          z: worldPosition.z + simpleGeometry.bounds.min.z,
+        },
+        max: {
+          x: worldPosition.x + simpleGeometry.bounds.max.x,
+          y: worldPosition.y + simpleGeometry.bounds.max.y,
+          z: worldPosition.z + simpleGeometry.bounds.max.z,
+        },
+      };
+    }
+    placedBounds = worldBounds;
 
     tapHint.classList.add('hidden');
   }

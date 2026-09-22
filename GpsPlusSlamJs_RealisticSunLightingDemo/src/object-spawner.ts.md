@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Creates a simple box for shadow debugging, matching the working pattern from SunShadowRigDemo. Replaces complex sundial to isolate ground shadow issues.
+Creates a simple box geometry for shadow debugging. This is a simpler geometry alternative to complex models.
 
 ## Public API
 
@@ -16,7 +16,7 @@ export interface SpawnedObject {
   readonly bounds: ContentBounds;
 }
 
-export function createSundialModel(options?: SpawnOptions): SpawnedObject;
+export function createSimpleGeometry(options?: SpawnOptions): SpawnedObject;
 ```
 
 ## Invariants
@@ -28,9 +28,9 @@ export function createSundialModel(options?: SpawnOptions): SpawnedObject;
 ## Examples
 
 ```ts
-import { createSundialModel } from './object-spawner.js';
+import { createSimpleGeometry } from './object-spawner.js';
 
-const box = createSundialModel({ scale: 1.0 });
+const box = createSimpleGeometry({ scale: 1.0 });
 arWorldGroup.add(box.mesh);
 ```
 

@@ -48,7 +48,7 @@ This demo fuses five core solar modules from `gps-plus-slam-app-framework`:
 
 ## Features
 
-- **WebXR Surface Hit-Testing & Tap-to-Place**: Detects horizontal real-world surfaces and anchors a realistic 3D sundial model.
+- **WebXR Surface Hit-Testing & Tap-to-Place**: Detects horizontal real-world surfaces and anchors a simple 3D geometry for shadow testing.
 - **Drift-Corrected GPS Anchoring**: Virtual objects stay planted in the real world using `createGpsAnchor` and `enableArWorldGroupAlignment`.
 - **Astronomically Grounded Shadows**: Directional shadows align with true solar cardinal directions (+X North, +Y Up, +Z East).
 - **Time Scrubbing Simulation**: Scrub 24 hours of daylight to watch shadows swing, elongate at golden hour, and extinguish at night.

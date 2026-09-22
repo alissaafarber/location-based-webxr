@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Main entrypoint for `GpsPlusSlamJs_RealisticSunLightingDemo`. Bootstraps WebXR AR lifecycle via `createEnableGpsArController`, runs surface hit-testing with `startHitTestReticle`, places drift-compensated digital sundials with `createGpsAnchor`, and coordinates the solar lighting and shadow pipeline. Uses GPS-gated tap-to-place logic via `decideTapPlacement` to ensure GPS anchoring works correctly.
+Main entrypoint for `GpsPlusSlamJs_RealisticSunLightingDemo`. Bootstraps WebXR AR lifecycle via `createEnableGpsArController`, runs surface hit-testing with `startHitTestReticle`, places drift-compensated simple geometry with `createGpsAnchor`, and coordinates the solar lighting and shadow pipeline. Uses GPS-gated tap-to-place logic via `decideTapPlacement` to ensure GPS anchoring works correctly.
 
 ## Public API
 

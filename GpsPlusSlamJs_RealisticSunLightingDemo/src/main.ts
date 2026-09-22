@@ -40,7 +40,7 @@ import {
 import type { ContentBounds } from 'gps-plus-slam-app-framework/visualization/sun-shadow-rig';
 import type { LatLong, LatLongAlt } from 'gps-plus-slam-app-framework/core';
 
-import { createSundialModel } from './object-spawner.js';
+import { createSimpleGeometry } from './object-spawner.js';
 import { decideTapPlacement } from './placement.js';
 import {
   createSunOrchestrator,
@@ -120,7 +120,7 @@ function main(): void {
       tapHint.classList.add('hidden');
       // Reset to default message after hint expires
       if (reticleHandle && placedMesh === null) {
-        tapHint.textContent = 'Point at ground & tap to place sundial';
+        tapHint.textContent = 'Point at ground & tap to place simple geometry';
         tapHint.classList.remove('hidden');
       }
       hintTimeout = null;
@@ -207,7 +207,7 @@ function main(): void {
   }
 
   // 3. Digital Object Tap-to-Place
-  function placeSundial(worldPosition: THREE.Vector3): void {
+  function placeSimpleGeometry(worldPosition: THREE.Vector3): void {
     const scene = getScene();
     const arWorldGroup = getArWorldGroup();
     const camera = getCamera();
@@ -222,18 +222,18 @@ function main(): void {
       placedMesh = null;
     }
 
-    const sundial = createSundialModel({ scale: 1.0 });
-    sundial.mesh.position.copy(worldPosition);
-    placedMesh = sundial.mesh;
+    const simpleGeometry = createSimpleGeometry({ scale: 1.0 });
+    simpleGeometry.mesh.position.copy(worldPosition);
+    placedMesh = simpleGeometry.mesh;
 
     // Add to arWorldGroup first (required for GPS anchoring to work)
-    arWorldGroup.add(sundial.mesh);
+    arWorldGroup.add(simpleGeometry.mesh);
     arWorldGroup.updateWorldMatrix(true, false);
-    sundial.mesh.position.copy(arWorldGroup.worldToLocal(worldPosition.clone()));
+    simpleGeometry.mesh.position.copy(arWorldGroup.worldToLocal(worldPosition.clone()));
 
     if (lastGps) {
       placedAnchor = createGpsAnchor({
-        object3D: sundial.mesh,
+        object3D: simpleGeometry.mesh,
         arWorldGroup,
         camera,
         gpsPoint: lastGps,
@@ -243,7 +243,7 @@ function main(): void {
     }
 
     // Use the pre-calculated bounds from the object spawner
-    placedBounds = sundial.bounds;
+    placedBounds = simpleGeometry.bounds;
 
     tapHint.classList.add('hidden');
   }
@@ -286,6 +286,7 @@ function main(): void {
         viewModel = createStatusPanelViewModel(orchestrator.adapter);
         bindViewModel(viewModel);
 
+        tapHint.textContent = 'Point at ground & tap to place simple geometry';
         tapHint.classList.remove('hidden');
 
         reticleHandle?.dispose();
@@ -303,7 +304,7 @@ function main(): void {
             if (decision.kind === 'no-surface' || worldPosition === null) {
               return;
             }
-            placeSundial(worldPosition);
+            placeSimpleGeometry(worldPosition);
           },
         });
 

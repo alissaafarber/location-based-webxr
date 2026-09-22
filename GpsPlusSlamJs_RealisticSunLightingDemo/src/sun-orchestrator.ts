@@ -68,8 +68,8 @@ export function createSunOrchestrator(
       ambientLight.intensity = lighting.ambientLevel;
       ambientLight.color.setHex(lighting.color);
 
-      // 3. Update shadow rig with direction only (match working demo pattern)
-      shadowRig.update(latestDirectionNue);
+      // 3. Update shadow rig with direction and lighting (content bounds updated per-frame)
+      shadowRig.update(latestDirectionNue, undefined, lighting);
     }
   });
 
@@ -84,7 +84,11 @@ export function createSunOrchestrator(
         // Update billboard position & frustum visibility for sun disc
         sunDisc.update(latestDirectionNue, camera);
 
-        // Shadow rig already updated in subscription, no per-frame update needed
+        // Update shadow rig with content bounds for proper shadow framing
+        if (contentBounds) {
+          const lighting = sunAltitudeToLighting(latestAltitudeRad);
+          shadowRig.update(latestDirectionNue, contentBounds, lighting);
+        }
       }
     },
 

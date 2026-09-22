@@ -40,11 +40,11 @@ export function createSunOrchestrator(
 ): SunOrchestrator {
   const adapter = createRealSunDataAdapter();
   const shadowRig = createSunShadowRig(deps.scene, {
-    mapSize: 2048,
+    mapSize: 4096,
     groundPlaneSize: 100,
-    shadowOpacity: 0.7,
-    bias: -0.0001,
-    normalBias: 0.05,
+    shadowOpacity: 0.8,
+    bias: -0.00005,
+    normalBias: 0.02,
   });
   const sunDisc = createVisibleSunDisc(deps.scene, {
     distance: 15,

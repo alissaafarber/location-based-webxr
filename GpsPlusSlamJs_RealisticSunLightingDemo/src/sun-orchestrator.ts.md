@@ -32,7 +32,7 @@ export function createSunOrchestrator(
 - Subscribes to solar state changes and propagates updates immediately to the shadow rig and ambient light.
 - `updateFrame` always updates the shadow rig with current lighting and content bounds (even when bounds are undefined, uses default bounds).
 - Content bounds must be in NUE coordinates (same as arWorldGroup local space) to match shadow rig's GPS-world NUE space.
-- Shadow rig uses increased opacity (0.7) and adjusted bias parameters for better shadow visibility and reduced artifacts.
+- Shadow rig uses high-resolution shadow map (4096px), increased opacity (0.8), and fine-tuned bias parameters for optimal self-shadowing and ground shadows.
 - `dispose` unhooks subscriptions, disposes child resources, and removes ambient light from the scene.
 
 ## Examples

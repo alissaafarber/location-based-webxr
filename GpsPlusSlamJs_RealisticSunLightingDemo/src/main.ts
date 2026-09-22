@@ -252,7 +252,7 @@ function main(): void {
         y: localPosition.y + ('center' in sundial.bounds ? sundial.bounds.center.y : 0.4),
         z: localPosition.z + ('center' in sundial.bounds ? sundial.bounds.center.z : 0),
       },
-      radius: 'radius' in sundial.bounds ? sundial.bounds.radius : 1.0,
+      radius: 'radius' in sundial.bounds ? sundial.bounds.radius * 1.5 : 1.5,
     };
 
     tapHint.classList.add('hidden');
@@ -283,6 +283,7 @@ function main(): void {
       if (renderer) {
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.autoUpdate = true;
       }
 
       if (scene && arWorldGroup) {

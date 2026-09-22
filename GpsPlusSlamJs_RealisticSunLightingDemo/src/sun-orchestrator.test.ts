@@ -47,7 +47,7 @@ describe('sun-orchestrator', () => {
     orchestrator.dispose();
   });
 
-  it('updateFrame delegates to sunDisc and shadowRig', () => {
+  it('updateFrame delegates to sunDisc only (shadow rig updated in subscription)', () => {
     const scene = new THREE.Scene();
     const arWorldGroup = new THREE.Group();
     scene.add(arWorldGroup);
@@ -66,7 +66,6 @@ describe('sun-orchestrator', () => {
     });
 
     const updateSunDiscSpy = vi.spyOn(orchestrator.sunDisc, 'update');
-    const updateShadowRigSpy = vi.spyOn(orchestrator.shadowRig, 'update');
 
     const contentBounds = {
       center: { x: 0, y: 0.5, z: 0 },
@@ -76,7 +75,6 @@ describe('sun-orchestrator', () => {
     orchestrator.updateFrame(camera, contentBounds);
 
     expect(updateSunDiscSpy).toHaveBeenCalled();
-    expect(updateShadowRigSpy).toHaveBeenCalled();
 
     orchestrator.dispose();
   });

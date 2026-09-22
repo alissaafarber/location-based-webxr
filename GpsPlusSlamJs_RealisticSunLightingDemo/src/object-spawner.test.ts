@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createSundialModel, type SpawnedObject } from './object-spawner.js';
 
 describe('object-spawner', () => {
-  it('creates a sundial model group with castShadow and receiveShadow enabled', () => {
+  it('creates a simple box with castShadow and receiveShadow enabled', () => {
     const spawned: SpawnedObject = createSundialModel();
 
     expect(spawned.mesh).toBeInstanceOf(THREE.Group);
@@ -19,7 +19,7 @@ describe('object-spawner', () => {
       }
     });
 
-    expect(meshCount).toBeGreaterThanOrEqual(3);
+    expect(meshCount).toBe(1); // Simple box has 1 mesh
   });
 
   it('computes valid ContentBounds enclosing the object above ground Y=0', () => {
